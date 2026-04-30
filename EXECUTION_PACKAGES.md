@@ -158,7 +158,7 @@ Completed on 2026-04-30. Added data-backed dashboard command cards and recent ac
 ---
 
 ## PKG-004 — Bari, Blue, Internal, and All Approval Queues
-Status: ready
+Status: complete
 
 ### Purpose
 Implement human approval consoles and actions with non-technical UX for Bari/Blue and operational controls for internal reviewers.
@@ -188,6 +188,13 @@ PKG-003 surfaced campaign lifecycle and approval signals. Dedicated review queue
 ### Regression checks
 - Existing dashboard and campaign routes still compile.
 - Review routes avoid technical jargon for Bari/Blue by default.
+
+### Completion notes
+Completed on 2026-04-30. Added route-specific Bari, Blue, internal, and all-approvals review surfaces backed by seeded approval data, including non-technical Bari copy review scaffold, Blue decision console details, internal send-readiness checklist, unified queue, and approval action affordances.
+
+### Validation evidence
+- `npm run lint` passed.
+- `npm run build` passed.
 
 ---
 
