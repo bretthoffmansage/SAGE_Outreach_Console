@@ -3,11 +3,13 @@
 Date: 2026-04-30
 
 ## H-001 — Validation and dependency hygiene
-Status: pending
+Status: complete
 - Run `npm run lint`.
 - Run `npm run build`.
 - Run `npm audit --audit-level=moderate` for visibility.
 - Do not force breaking dependency upgrades without a clear safe fix.
+
+Completion evidence: `npm audit --audit-level=moderate` initially reported a vulnerable nested `postcss` under Next and suggested a breaking force downgrade. Added an npm override for `next` -> `postcss@8.5.10`, then `npm audit --audit-level=moderate`, `npm run lint`, and `npm run build` all passed.
 
 ## H-002 — Route and empty-state review
 Status: pending
