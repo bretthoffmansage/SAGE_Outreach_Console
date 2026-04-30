@@ -238,7 +238,7 @@ Completed on 2026-04-30. Added route-specific source-of-truth library views for 
 ---
 
 ## PKG-006 — Agent Runs and LangGraph Workflow Visibility
-Status: draft
+Status: ready
 
 ### Purpose
 Implement agent roster, structured agent output displays, simulated campaign workflow execution, approval-router outputs, agent run detail, and LangGraph map visualization.
@@ -246,8 +246,26 @@ Implement agent roster, structured agent output displays, simulated campaign wor
 ### PRD coverage
 `PRD-009`, `PRD-010`, `PRD-011`, `PRD-025.2`
 
-### Scope
-To be expanded after campaign, approval, and library foundations exist.
+### Why now
+Campaigns, approvals, and source libraries now exist, giving the agent workflow enough context to display structured run output and workflow state safely.
+
+### Expanded scope
+- Implement `/intelligence/agent-runs` with agent roster cards and structured seeded run-step outputs.
+- Implement `/intelligence/langgraph` with a readable node/edge workflow map, statuses, human approval pause indicators, and clickable/detail-style cards.
+- Surface the base agent output contract fields from seeded data: risk, confidence, approval owner, blocking/next-step summaries, and structured outputs.
+- Keep actual provider calls and live LangGraph orchestration out of scope; use demo-safe stored outputs.
+
+### Out of scope
+- Live OpenAI/Claude calls.
+- Real LangGraph execution engine.
+- Mutating workflow run controls.
+
+### Required checks
+- `npm run lint`
+- `npm run build`
+
+### Regression checks
+- Existing dashboard, campaign, review, and library routes still compile.
 
 ---
 
