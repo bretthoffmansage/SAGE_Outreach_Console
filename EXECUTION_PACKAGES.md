@@ -384,7 +384,7 @@ Completed on 2026-04-30. Added admin settings surface for users/roles, agents/pr
 ---
 
 ## PKG-010 — UX Cohesion and Final MVP Polish
-Status: ready
+Status: complete
 
 ### Purpose
 Refine responsiveness, accessibility, copy, loading/empty/error states, visual cohesion, and non-technical user polish across the product.
@@ -411,3 +411,10 @@ All primary MVP route surfaces now exist. Final package work should improve glob
 
 ## Explicit deferments
 The following PRD items are intentionally deferred beyond first build/package set unless later expansion narrows them to safe scaffolds: autonomous sending without approval, direct paid ad launch, fine-tuned Bari voice model, complex enterprise permissions, full Keap campaign-builder replacement, HelpDesk reply sending, advanced revenue attribution, direct Meta/Google Ads APIs, SMS workflow, and landing-page generation.
+
+### PKG-010 Completion notes
+Completed on 2026-04-30. Added global skip-link/focus accessibility affordance, app-shell footer with demo-safe/human-approval messaging, and README route/validation/environment documentation.
+
+### PKG-010 Validation evidence
+- `npm run lint` passed.
+- `npm run build` passed.

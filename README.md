@@ -583,3 +583,29 @@ to:
 - final clean state
 
 with minimal manual rescue.
+
+
+## AI Campaign Desk application scaffold
+
+This workspace now contains a Next.js App Router scaffold for AI Campaign Desk. It is intentionally demo-safe: Clerk, Convex, OpenAI, Claude/Anthropic, Keap, Zapier, HelpDesk.com, and LangGraph surfaces are represented with setup-aware status and manual fallbacks, but no real credentials are committed.
+
+### Useful routes
+
+- `/dashboard` — command center
+- `/campaigns`, `/campaigns/new`, `/campaigns/camp_reactivation_may` — campaign lifecycle
+- `/reviews/bari`, `/reviews/blue`, `/reviews/internal`, `/reviews/all` — approval queues
+- `/libraries/offers`, `/libraries/email`, `/libraries/voice-rules`, `/libraries/signoffs`, `/libraries/audiences`, `/libraries/compliance`, `/libraries/learning` — source-of-truth libraries
+- `/intelligence/agent-runs`, `/intelligence/langgraph`, `/intelligence/responses`, `/intelligence/performance` — workflow intelligence
+- `/operations/keap`, `/operations/integrations` — integration and handoff posture
+- `/settings` — admin, roles, audit, and safety posture
+
+### Validation
+
+```bash
+npm run lint
+npm run build
+```
+
+### Environment
+
+Copy `.env.example` to `.env.local` for local live-service setup. Missing keys should leave the app in demo/manual mode rather than breaking the UI.

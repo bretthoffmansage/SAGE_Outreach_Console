@@ -57,9 +57,9 @@ function MobileNav() {
 
 export function AppShell({ children, title }: { children: React.ReactNode; title: string }) {
   return (
-    <div className="min-h-screen lg:flex">
+    <><a href="#main-content" className="focus-ring sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-full focus:bg-white focus:px-4 focus:py-2 focus:font-semibold focus:text-[#172033]">Skip to main content</a><div className="min-h-screen lg:flex">
       <Sidebar />
-      <main className="min-w-0 flex-1">
+      <main id="main-content" className="min-w-0 flex-1">
         <header className="sticky top-0 z-40 border-b border-[#eadfce]/80 bg-[#fbf7ef]/88 px-4 py-4 backdrop-blur md:px-8">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -81,7 +81,8 @@ export function AppShell({ children, title }: { children: React.ReactNode; title
           </div>
         </header>
         <div className="px-4 py-8 md:px-8">{children}</div>
+        <footer className="border-t border-[#eadfce] px-4 py-6 text-center text-xs font-semibold uppercase tracking-[0.18em] text-[#8a7357] md:px-8">Demo-safe MVP scaffold · Missing integrations use manual fallbacks · Human approval remains authoritative</footer>
       </main>
-    </div>
+    </div></>
   );
 }
