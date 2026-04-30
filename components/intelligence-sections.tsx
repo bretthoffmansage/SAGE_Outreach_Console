@@ -1,11 +1,13 @@
 "use client";
 
+import { api } from "@/convex/_generated/api";
+import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Braces, ChevronLeft, GitBranch, RotateCcw, Save, ShieldAlert, Sparkles } from "lucide-react";
-import { defaultAgentConfigs, defaultAgentRuns, defaultAgentRuntimeStates, getDefaultAgentConfig, getDefaultAgentRuntimeState } from "@/lib/agent-config";
+import { defaultAgentConfigs, getDefaultAgentConfig, getDefaultAgentRuntimeState } from "@/lib/agent-config";
 import { agentRunSteps, campaigns, learningInsights, performanceSnapshots, responses } from "@/lib/data/demo-data";
-import type { AgentConfigRecord, AgentRunRecord, AgentRuntimeStateRecord } from "@/lib/domain";
+import type { AgentConfigRecord } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 import {
   AgentActivityBars,
@@ -54,23 +56,9 @@ function statusLabel(status: string) {
   return status.replace(/_/g, " ");
 }
 
-function groupRunsByAgent(runs: AgentRunRecord[]) {
-  return runs.reduce<Record<string, AgentRunRecord[]>>((accumulator, run) => {
-    accumulator[run.agentId] = [...(accumulator[run.agentId] ?? []), run].sort((left, right) => right.startedAt - left.startedAt);
-    return accumulator;
-  }, {});
-}
-
-function buildConfigMap() {
-  return defaultAgentConfigs.reduce<Record<string, AgentConfigRecord>>((accumulator, config) => {
-    accumulator[config.agentId] = { ...config };
-    return accumulator;
-  }, {});
-}
-
-function buildRuntimeMap() {
-  return defaultAgentRuntimeStates.reduce<Record<string, AgentRuntimeStateRecord>>((accumulator, runtime) => {
-    accumulator[runtime.agentId] = { ...runtime };
+function buildRecordMap<T extends { agentId: string }>(records: T[]) {
+  return records.reduce<Record<string, T>>((accumulator, record) => {
+    accumulator[record.agentId] = { ...record };
     return accumulator;
   }, {});
 }
@@ -214,11 +202,27 @@ export function AgentRunsSection() {
 export function LangGraphSection() {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<AgentDetailTab>("overview");
-  const [configMap, setConfigMap] = useState<Record<string, AgentConfigRecord>>(() => buildConfigMap());
-  const [runtimeMap, setRuntimeMap] = useState<Record<string, AgentRuntimeStateRecord>>(() => buildRuntimeMap());
-  const [runsByAgent, setRunsByAgent] = useState<Record<string, AgentRunRecord[]>>(() => groupRunsByAgent(defaultAgentRuns));
+  const [draftConfigMap, setDraftConfigMap] = useState<Record<string, AgentConfigRecord>>({});
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [isWorking, setIsWorking] = useState(false);
   const timersRef = useRef<number[]>([]);
+  const seedAttemptedRef = useRef(false);
+
+  const agentConfigs = useQuery(api.agents.listAgentConfigs);
+  const runtimeStates = useQuery(api.agents.listAgentRuntimeStates);
+  const selectedRuns = useQuery(
+    api.agents.listAgentRunsByAgentId,
+    selectedAgentId ? { agentId: selectedAgentId } : "skip",
+  );
+
+  const seedDefaultAgentConfigsIfEmpty = useMutation(api.agents.seedDefaultAgentConfigsIfEmpty);
+  const seedDefaultAgentRuntimeStatesIfEmpty = useMutation(api.agents.seedDefaultAgentRuntimeStatesIfEmpty);
+  const seedDefaultAgentRunsIfEmpty = useMutation(api.agents.seedDefaultAgentRunsIfEmpty);
+  const upsertAgentConfig = useMutation(api.agents.upsertAgentConfig);
+  const upsertAgentRuntimeState = useMutation(api.agents.upsertAgentRuntimeState);
+  const createAgentRun = useMutation(api.agents.createAgentRun);
+  const upsertAgentRun = useMutation(api.agents.upsertAgentRun);
+  const resetDemoAgentRuntimeState = useMutation(api.agents.resetDemoAgentRuntimeState);
 
   useEffect(() => {
     return () => {
@@ -228,64 +232,131 @@ export function LangGraphSection() {
     };
   }, []);
 
+  useEffect(() => {
+    if (agentConfigs === undefined || seedAttemptedRef.current || agentConfigs.length > 0) return;
+
+    seedAttemptedRef.current = true;
+    void (async () => {
+      try {
+        const seededConfigs = await seedDefaultAgentConfigsIfEmpty();
+        await Promise.all([
+          seedDefaultAgentRuntimeStatesIfEmpty(),
+          seedDefaultAgentRunsIfEmpty(),
+        ]);
+        if (seededConfigs.seeded) {
+          setFeedback("Default agent configs seeded.");
+        }
+      } catch {
+        setFeedback("Unable to seed default agent configs. Check Convex connection.");
+        seedAttemptedRef.current = false;
+      }
+    })();
+  }, [
+    agentConfigs,
+    seedDefaultAgentConfigsIfEmpty,
+    seedDefaultAgentRuntimeStatesIfEmpty,
+    seedDefaultAgentRunsIfEmpty,
+  ]);
+
+  const persistedConfigMap = useMemo(
+    () => buildRecordMap(agentConfigs ?? defaultAgentConfigs),
+    [agentConfigs],
+  );
+  const runtimeMap = useMemo(
+    () => buildRecordMap(runtimeStates ?? []),
+    [runtimeStates],
+  );
+  const effectiveConfigMap = useMemo(
+    () => ({
+      ...persistedConfigMap,
+      ...draftConfigMap,
+    }),
+    [draftConfigMap, persistedConfigMap],
+  );
   const orderedConfigs = useMemo(
-    () =>
-      [...Object.values(configMap)].sort((left, right) => left.workflowOrder - right.workflowOrder),
-    [configMap],
+    () => [...Object.values(effectiveConfigMap)].sort((left, right) => left.workflowOrder - right.workflowOrder),
+    [effectiveConfigMap],
   );
 
-  const selectedConfig = selectedAgentId ? configMap[selectedAgentId] : null;
-  const selectedRuntime = selectedAgentId ? runtimeMap[selectedAgentId] : null;
-  const selectedRuns = selectedAgentId ? runsByAgent[selectedAgentId] ?? [] : [];
+  const selectedConfig = selectedAgentId ? effectiveConfigMap[selectedAgentId] ?? null : null;
+  const selectedRuntime = selectedAgentId ? runtimeMap[selectedAgentId] ?? null : null;
+  const selectedRunsList = selectedRuns ?? [];
 
   const updateConfig = <K extends keyof AgentConfigRecord>(agentId: string, key: K, value: AgentConfigRecord[K]) => {
-    setConfigMap((current) => ({
+    setDraftConfigMap((current) => ({
       ...current,
       [agentId]: {
-        ...current[agentId],
+        ...(current[agentId] ?? persistedConfigMap[agentId]),
         [key]: value,
       },
     }));
   };
 
-  const resetDemoState = () => {
+  const saveConfiguration = async () => {
+    if (!selectedAgentId || !selectedConfig) return;
+
+    setIsWorking(true);
+    try {
+      const savedAt = Date.now();
+      await upsertAgentConfig({
+        agentId: selectedAgentId,
+        patch: {
+          ...selectedConfig,
+          configVersion: (persistedConfigMap[selectedAgentId]?.configVersion ?? selectedConfig.configVersion) + 1,
+          lastEditedAt: savedAt,
+          lastEditedBy: "demo_operator",
+          updatedAt: savedAt,
+          updatedBy: "demo_operator",
+        },
+      });
+      setDraftConfigMap((current) => {
+        const next = { ...current };
+        delete next[selectedAgentId];
+        return next;
+      });
+      setFeedback(`${selectedConfig.displayName} configuration saved to Convex.`);
+    } catch {
+      setFeedback("Unable to save configuration. Check Convex connection.");
+    } finally {
+      setIsWorking(false);
+    }
+  };
+
+  const resetDemoState = async () => {
     if (!selectedAgentId) return;
 
     const fallbackConfig = getDefaultAgentConfig(selectedAgentId);
-    const fallbackRuntime = getDefaultAgentRuntimeState(selectedAgentId);
+    if (!fallbackConfig) return;
 
-    if (fallbackConfig) {
-      setConfigMap((current) => ({ ...current, [selectedAgentId]: { ...fallbackConfig } }));
+    setIsWorking(true);
+    try {
+      const savedAt = Date.now();
+      await upsertAgentConfig({
+        agentId: selectedAgentId,
+        patch: {
+          ...fallbackConfig,
+          configVersion: (persistedConfigMap[selectedAgentId]?.configVersion ?? fallbackConfig.configVersion) + 1,
+          lastEditedAt: savedAt,
+          lastEditedBy: "demo_operator",
+          updatedAt: savedAt,
+          updatedBy: "demo_operator",
+        },
+      });
+      await resetDemoAgentRuntimeState({ agentId: selectedAgentId });
+      setDraftConfigMap((current) => {
+        const next = { ...current };
+        delete next[selectedAgentId];
+        return next;
+      });
+      setFeedback(`${fallbackConfig.displayName} demo state reset.`);
+    } catch {
+      setFeedback("Unable to reset configuration. Check Convex connection.");
+    } finally {
+      setIsWorking(false);
     }
-
-    if (fallbackRuntime) {
-      setRuntimeMap((current) => ({ ...current, [selectedAgentId]: { ...fallbackRuntime } }));
-    }
-
-    setRunsByAgent((current) => ({
-      ...current,
-      [selectedAgentId]: defaultAgentRuns.filter((run) => run.agentId === selectedAgentId),
-    }));
-    setFeedback(`${fallbackConfig?.displayName ?? "Agent"} demo state reset.`);
   };
 
-  const saveConfiguration = () => {
-    if (!selectedAgentId || !selectedConfig) return;
-
-    const savedAt = Date.now();
-    setConfigMap((current) => ({
-      ...current,
-      [selectedAgentId]: {
-        ...current[selectedAgentId],
-        configVersion: current[selectedAgentId].configVersion + 1,
-        lastEditedAt: savedAt,
-        lastEditedBy: "demo_operator",
-      },
-    }));
-    setFeedback(`${selectedConfig.displayName} configuration saved to the local demo state. Convex persistence scaffolding is ready for live wiring.`);
-  };
-
-  const testAgent = () => {
+  const testAgent = async () => {
     if (!selectedAgentId || !selectedConfig) return;
 
     const startedAt = Date.now();
@@ -301,23 +372,24 @@ export function LangGraphSection() {
     }
     timersRef.current = [];
 
-    setRuntimeMap((current) => ({
-      ...current,
-      [selectedAgentId]: {
-        ...current[selectedAgentId],
-        status: "running",
-        isRunning: true,
-        currentTaskLabel: taskSequence[0].label,
-        currentTaskDetail: taskSequence[0].detail,
-        lastStartedAt: startedAt,
-        lastRunId: runId,
-        lastError: undefined,
-        updatedAt: startedAt,
-      },
-    }));
+    setIsWorking(true);
+    try {
+      await upsertAgentRuntimeState({
+        agentId: selectedAgentId,
+        patch: {
+          ...(selectedRuntime ?? getDefaultAgentRuntimeState(selectedAgentId)),
+          status: "running",
+          isRunning: true,
+          currentTaskLabel: taskSequence[0].label,
+          currentTaskDetail: taskSequence[0].detail,
+          lastStartedAt: startedAt,
+          lastRunId: runId,
+          lastError: undefined,
+          updatedAt: startedAt,
+        },
+      });
 
-    setRunsByAgent((current) => {
-      const nextRun: AgentRunRecord = {
+      await createAgentRun({
         runId,
         campaignId: "camp_reactivation_may",
         agentId: selectedAgentId,
@@ -326,25 +398,25 @@ export function LangGraphSection() {
         outputSummary: "Running seeded demo test.",
         outputJson: JSON.stringify({ provider: selectedConfig.preferredProvider, model: selectedConfig.preferredModel }, null, 2),
         startedAt,
-      };
-
-      return {
-        ...current,
-        [selectedAgentId]: [nextRun, ...(current[selectedAgentId] ?? [])],
-      };
-    });
+      });
+    } catch {
+      setFeedback("Unable to run test agent. Check Convex connection.");
+      setIsWorking(false);
+      return;
+    }
 
     taskSequence.slice(1).forEach((task, index) => {
       const timer = window.setTimeout(() => {
-        setRuntimeMap((current) => ({
-          ...current,
-          [selectedAgentId]: {
-            ...current[selectedAgentId],
+        void upsertAgentRuntimeState({
+          agentId: selectedAgentId,
+          patch: {
             currentTaskLabel: task.label,
             currentTaskDetail: task.detail,
             updatedAt: Date.now(),
           },
-        }));
+        }).catch(() => {
+          setFeedback("Unable to update runtime state. Check Convex connection.");
+        });
       }, (index + 1) * 900);
       timersRef.current.push(timer);
     });
@@ -353,47 +425,80 @@ export function LangGraphSection() {
       const finishedAt = Date.now();
       const outputSummary = `${selectedConfig.displayName} demo test completed with structured output scaffolding intact.`;
 
-      setRuntimeMap((current) => ({
-        ...current,
-        [selectedAgentId]: {
-          ...current[selectedAgentId],
-          status: "complete",
-          isRunning: false,
-          currentTaskLabel: "Demo test complete",
-          currentTaskDetail: "Runtime fields updated successfully for future live LangGraph execution.",
-          lastFinishedAt: finishedAt,
-          lastOutputSummary: outputSummary,
-          updatedAt: finishedAt,
-        },
-      }));
-
-      setRunsByAgent((current) => ({
-        ...current,
-        [selectedAgentId]: (current[selectedAgentId] ?? []).map((run, index) =>
-          index === 0 && run.runId === runId
-            ? {
-                ...run,
-                status: "complete",
-                finishedAt,
-                outputSummary,
-                outputJson: JSON.stringify(
-                  {
-                    currentTaskLabel: "Demo test complete",
-                    nextAgentIds: selectedConfig.nextAgentIds,
-                    handoffConditions: selectedConfig.handoffConditions,
-                  },
-                  null,
-                  2,
-                ),
-              }
-            : run,
-        ),
-      }));
-
-      setFeedback(`${selectedConfig.displayName} test run completed.`);
+      void Promise.all([
+        upsertAgentRuntimeState({
+          agentId: selectedAgentId,
+          patch: {
+            ...(selectedRuntime ?? getDefaultAgentRuntimeState(selectedAgentId)),
+            status: "complete",
+            isRunning: false,
+            currentTaskLabel: "Demo test complete",
+            currentTaskDetail: "Runtime fields updated successfully for future live LangGraph execution.",
+            lastFinishedAt: finishedAt,
+            lastOutputSummary: outputSummary,
+            lastRunId: runId,
+            updatedAt: finishedAt,
+          },
+        }),
+        upsertAgentRun({
+          runId,
+          patch: {
+            campaignId: "camp_reactivation_may",
+            agentId: selectedAgentId,
+            status: "complete",
+            finishedAt,
+            outputSummary,
+            outputJson: JSON.stringify(
+              {
+                currentTaskLabel: "Demo test complete",
+                nextAgentIds: selectedConfig.nextAgentIds,
+                handoffConditions: selectedConfig.handoffConditions,
+              },
+              null,
+              2,
+            ),
+          },
+        }),
+      ])
+        .then(() => {
+          setFeedback(`${selectedConfig.displayName} test run completed.`);
+        })
+        .catch(() => {
+          setFeedback("Unable to update test run results. Check Convex connection.");
+        })
+        .finally(() => {
+          setIsWorking(false);
+        });
     }, 3200);
     timersRef.current.push(completeTimer);
   };
+
+  if (agentConfigs === undefined || runtimeStates === undefined || (selectedAgentId && selectedRuns === undefined)) {
+    return (
+      <div className="space-y-5">
+        <SectionHeader eyebrow="Active Agents" title="Active Agents" />
+        <ControlPanel className="p-4">
+          <p className="text-sm text-slate-300">Loading agent configs from Convex.</p>
+        </ControlPanel>
+      </div>
+    );
+  }
+
+  if (!orderedConfigs.length) {
+    return (
+      <div className="space-y-5">
+        <SectionHeader eyebrow="Active Agents" title="Active Agents" />
+        <ControlPanel className="p-4">
+          <p className="text-sm text-slate-300">Seeding default agent configs.</p>
+        </ControlPanel>
+        {feedback ? (
+          <ControlPanel className="p-4">
+            <p className="text-sm text-slate-300">{feedback}</p>
+          </ControlPanel>
+        ) : null}
+      </div>
+    );
+  }
 
   if (selectedAgentId && selectedConfig && selectedRuntime) {
     const activeAgentId = selectedAgentId;
@@ -425,7 +530,10 @@ export function LangGraphSection() {
           <div className="flex flex-wrap gap-2">
             <button
               className={cn(actionButtonStyles, "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800")}
-              onClick={testAgent}
+              disabled={isWorking}
+              onClick={() => {
+                void testAgent();
+              }}
               type="button"
             >
               <Sparkles className="h-4 w-4" />
@@ -433,7 +541,10 @@ export function LangGraphSection() {
             </button>
             <button
               className={cn(actionButtonStyles, "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800")}
-              onClick={resetDemoState}
+              disabled={isWorking}
+              onClick={() => {
+                void resetDemoState();
+              }}
               type="button"
             >
               <RotateCcw className="h-4 w-4" />
@@ -441,7 +552,10 @@ export function LangGraphSection() {
             </button>
             <button
               className={cn(actionButtonStyles, "border-sky-500/60 bg-sky-500 text-slate-950 hover:bg-sky-400")}
-              onClick={saveConfiguration}
+              disabled={isWorking}
+              onClick={() => {
+                void saveConfiguration();
+              }}
               type="button"
             >
               <Save className="h-4 w-4" />
@@ -451,7 +565,14 @@ export function LangGraphSection() {
         </div>
 
         {feedback ? (
-          <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
+          <div
+            className={cn(
+              "rounded-xl px-4 py-3 text-sm",
+              feedback.startsWith("Unable")
+                ? "border border-rose-500/30 bg-rose-500/10 text-rose-100"
+                : "border border-sky-500/30 bg-sky-500/10 text-sky-100",
+            )}
+          >
             {feedback}
           </div>
         ) : null}
@@ -584,7 +705,7 @@ export function LangGraphSection() {
                   <div className="flex items-center justify-between gap-3"><span>Last edited by</span><span className="text-slate-100">{selectedConfig.lastEditedBy ?? "system_seed"}</span></div>
                   <div className="flex items-center justify-between gap-3"><span>Last edited at</span><span className="text-slate-100">{formatTimestamp(selectedConfig.lastEditedAt)}</span></div>
                 </div>
-                <p className="mt-3 text-xs text-slate-400">Persists via `agentConfigs`; runtime and run history come from `agentRuntimeStates` and `agentRuns` scaffolding.</p>
+                <p className="mt-3 text-xs text-slate-400">Persists via Convex `agentConfigs`; runtime and run history sync through `agentRuntimeStates` and `agentRuns`.</p>
                 {selectedConfig.notes ? <p className="mt-2 text-xs text-slate-300">Notes: {selectedConfig.notes}</p> : null}
               </ControlPanel>
             </div>
@@ -594,187 +715,187 @@ export function LangGraphSection() {
         <section className="grid gap-4 xl:grid-cols-1">
           {activeDetailTab === "prompt" || activeDetailTab === "io" || activeDetailTab === "rules" || activeDetailTab === "routing" ? (
             <div className="space-y-4">
-            {activeDetailTab === "prompt" ? (
-            <ControlPanel className="p-4">
-              <div className="flex items-center gap-2">
-                <StatusDot tone="purple" />
-                <h3 className="text-sm font-semibold text-slate-100">Prompt Configuration</h3>
-              </div>
-              <div className="mt-4 grid gap-4">
-                <LabeledField label="System prompt">
-                  <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "systemPrompt", event.target.value)} value={selectedConfig.systemPrompt} />
-                </LabeledField>
-                <LabeledField label="Task prompt template">
-                  <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "taskPromptTemplate", event.target.value)} value={selectedConfig.taskPromptTemplate} />
-                </LabeledField>
-                <LabeledField label="Style guidance">
-                  <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "styleGuidance", event.target.value)} value={selectedConfig.styleGuidance ?? ""} />
-                </LabeledField>
-                <LabeledField label="Example references">
-                  <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "exampleReferences", fromLines(event.target.value))} value={toLines(selectedConfig.exampleReferences ?? [])} />
-                </LabeledField>
-              </div>
-            </ControlPanel>
-            ) : null}
+              {activeDetailTab === "prompt" ? (
+                <ControlPanel className="p-4">
+                  <div className="flex items-center gap-2">
+                    <StatusDot tone="purple" />
+                    <h3 className="text-sm font-semibold text-slate-100">Prompt Configuration</h3>
+                  </div>
+                  <div className="mt-4 grid gap-4">
+                    <LabeledField label="System prompt">
+                      <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "systemPrompt", event.target.value)} value={selectedConfig.systemPrompt} />
+                    </LabeledField>
+                    <LabeledField label="Task prompt template">
+                      <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "taskPromptTemplate", event.target.value)} value={selectedConfig.taskPromptTemplate} />
+                    </LabeledField>
+                    <LabeledField label="Style guidance">
+                      <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "styleGuidance", event.target.value)} value={selectedConfig.styleGuidance ?? ""} />
+                    </LabeledField>
+                    <LabeledField label="Example references">
+                      <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "exampleReferences", fromLines(event.target.value))} value={toLines(selectedConfig.exampleReferences ?? [])} />
+                    </LabeledField>
+                  </div>
+                </ControlPanel>
+              ) : null}
 
-            {activeDetailTab === "io" ? (
-            <ControlPanel className="p-4">
-              <div className="flex items-center gap-2">
-                <StatusDot tone="green" />
-                <h3 className="text-sm font-semibold text-slate-100">Input / Output Contracts</h3>
-              </div>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <LabeledField label="Input schema JSON">
-                  <textarea className={`${textareaStyles} console-code`} onChange={(event) => updateConfig(activeAgentId, "inputSchemaJson", event.target.value)} value={selectedConfig.inputSchemaJson} />
-                </LabeledField>
-                <LabeledField label="Output schema JSON">
-                  <textarea className={`${textareaStyles} console-code`} onChange={(event) => updateConfig(activeAgentId, "outputSchemaJson", event.target.value)} value={selectedConfig.outputSchemaJson} />
-                </LabeledField>
-                <LabeledField label="Required inputs">
-                  <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "requiredInputs", fromLines(event.target.value))} value={toLines(selectedConfig.requiredInputs)} />
-                </LabeledField>
-                <LabeledField label="Required outputs">
-                  <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "requiredOutputs", fromLines(event.target.value))} value={toLines(selectedConfig.requiredOutputs)} />
-                </LabeledField>
-                <LabeledField label="Optional inputs">
-                  <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "optionalInputs", fromLines(event.target.value))} value={toLines(selectedConfig.optionalInputs)} />
-                </LabeledField>
-                <LabeledField label="Escalation markers">
-                  <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "escalationMarkers", fromLines(event.target.value))} value={toLines(selectedConfig.escalationMarkers)} />
-                </LabeledField>
-              </div>
-            </ControlPanel>
-            ) : null}
+              {activeDetailTab === "io" ? (
+                <ControlPanel className="p-4">
+                  <div className="flex items-center gap-2">
+                    <StatusDot tone="green" />
+                    <h3 className="text-sm font-semibold text-slate-100">Input / Output Contracts</h3>
+                  </div>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <LabeledField label="Input schema JSON">
+                      <textarea className={`${textareaStyles} console-code`} onChange={(event) => updateConfig(activeAgentId, "inputSchemaJson", event.target.value)} value={selectedConfig.inputSchemaJson} />
+                    </LabeledField>
+                    <LabeledField label="Output schema JSON">
+                      <textarea className={`${textareaStyles} console-code`} onChange={(event) => updateConfig(activeAgentId, "outputSchemaJson", event.target.value)} value={selectedConfig.outputSchemaJson} />
+                    </LabeledField>
+                    <LabeledField label="Required inputs">
+                      <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "requiredInputs", fromLines(event.target.value))} value={toLines(selectedConfig.requiredInputs)} />
+                    </LabeledField>
+                    <LabeledField label="Required outputs">
+                      <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "requiredOutputs", fromLines(event.target.value))} value={toLines(selectedConfig.requiredOutputs)} />
+                    </LabeledField>
+                    <LabeledField label="Optional inputs">
+                      <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "optionalInputs", fromLines(event.target.value))} value={toLines(selectedConfig.optionalInputs)} />
+                    </LabeledField>
+                    <LabeledField label="Escalation markers">
+                      <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "escalationMarkers", fromLines(event.target.value))} value={toLines(selectedConfig.escalationMarkers)} />
+                    </LabeledField>
+                  </div>
+                </ControlPanel>
+              ) : null}
 
-            {activeDetailTab === "rules" ? (
-            <ControlPanel className="p-4">
-              <div className="flex items-center gap-2">
-                <StatusDot tone="amber" />
-                <h3 className="text-sm font-semibold text-slate-100">Rules & Guardrails</h3>
-              </div>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <LabeledField label="Active rules">
-                  <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "activeRules", fromLines(event.target.value))} value={toLines(selectedConfig.activeRules)} />
-                </LabeledField>
-                <LabeledField label="Blocking rules">
-                  <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "blockingRules", fromLines(event.target.value))} value={toLines(selectedConfig.blockingRules)} />
-                </LabeledField>
-                <LabeledField label="Warning rules">
-                  <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "warningRules", fromLines(event.target.value))} value={toLines(selectedConfig.warningRules)} />
-                </LabeledField>
-                <LabeledField label="Allowed actions">
-                  <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "allowedActions", fromLines(event.target.value))} value={toLines(selectedConfig.allowedActions)} />
-                </LabeledField>
-                <LabeledField label="Disallowed actions">
-                  <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "disallowedActions", fromLines(event.target.value))} value={toLines(selectedConfig.disallowedActions)} />
-                </LabeledField>
-              </div>
-              <div className="mt-4 grid gap-2 md:grid-cols-2">
-                <ToggleField checked={selectedConfig.humanApprovalRequired} label="Human approval required" onChange={(next) => updateConfig(activeAgentId, "humanApprovalRequired", next)} />
-                <ToggleField checked={selectedConfig.canCreateApprovalItems} label="Can create approval items" onChange={(next) => updateConfig(activeAgentId, "canCreateApprovalItems", next)} />
-                <ToggleField checked={selectedConfig.canModifyCopy} label="Can modify copy" onChange={(next) => updateConfig(activeAgentId, "canModifyCopy", next)} />
-                <ToggleField checked={selectedConfig.canReadLibraries} label="Can read libraries" onChange={(next) => updateConfig(activeAgentId, "canReadLibraries", next)} />
-                <ToggleField checked={selectedConfig.canTriggerIntegrations} label="Can trigger integrations" onChange={(next) => updateConfig(activeAgentId, "canTriggerIntegrations", next)} />
-                <ToggleField checked={selectedConfig.enabled} label="Agent enabled" onChange={(next) => updateConfig(activeAgentId, "enabled", next)} />
-              </div>
-            </ControlPanel>
-            ) : null}
+              {activeDetailTab === "rules" ? (
+                <ControlPanel className="p-4">
+                  <div className="flex items-center gap-2">
+                    <StatusDot tone="amber" />
+                    <h3 className="text-sm font-semibold text-slate-100">Rules & Guardrails</h3>
+                  </div>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <LabeledField label="Active rules">
+                      <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "activeRules", fromLines(event.target.value))} value={toLines(selectedConfig.activeRules)} />
+                    </LabeledField>
+                    <LabeledField label="Blocking rules">
+                      <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "blockingRules", fromLines(event.target.value))} value={toLines(selectedConfig.blockingRules)} />
+                    </LabeledField>
+                    <LabeledField label="Warning rules">
+                      <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "warningRules", fromLines(event.target.value))} value={toLines(selectedConfig.warningRules)} />
+                    </LabeledField>
+                    <LabeledField label="Allowed actions">
+                      <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "allowedActions", fromLines(event.target.value))} value={toLines(selectedConfig.allowedActions)} />
+                    </LabeledField>
+                    <LabeledField label="Disallowed actions">
+                      <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "disallowedActions", fromLines(event.target.value))} value={toLines(selectedConfig.disallowedActions)} />
+                    </LabeledField>
+                  </div>
+                  <div className="mt-4 grid gap-2 md:grid-cols-2">
+                    <ToggleField checked={selectedConfig.humanApprovalRequired} label="Human approval required" onChange={(next) => updateConfig(activeAgentId, "humanApprovalRequired", next)} />
+                    <ToggleField checked={selectedConfig.canCreateApprovalItems} label="Can create approval items" onChange={(next) => updateConfig(activeAgentId, "canCreateApprovalItems", next)} />
+                    <ToggleField checked={selectedConfig.canModifyCopy} label="Can modify copy" onChange={(next) => updateConfig(activeAgentId, "canModifyCopy", next)} />
+                    <ToggleField checked={selectedConfig.canReadLibraries} label="Can read libraries" onChange={(next) => updateConfig(activeAgentId, "canReadLibraries", next)} />
+                    <ToggleField checked={selectedConfig.canTriggerIntegrations} label="Can trigger integrations" onChange={(next) => updateConfig(activeAgentId, "canTriggerIntegrations", next)} />
+                    <ToggleField checked={selectedConfig.enabled} label="Agent enabled" onChange={(next) => updateConfig(activeAgentId, "enabled", next)} />
+                  </div>
+                </ControlPanel>
+              ) : null}
 
-            {activeDetailTab === "routing" ? (
-            <ControlPanel className="p-4">
-              <div className="flex items-center gap-2">
-                <StatusDot tone="blue" />
-                <h3 className="text-sm font-semibold text-slate-100">Routing & Handoff</h3>
-              </div>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <LabeledField label="Next agent IDs">
-                  <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "nextAgentIds", fromLines(event.target.value))} value={toLines(selectedConfig.nextAgentIds)} />
-                </LabeledField>
-                <LabeledField label="Handoff conditions">
-                  <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "handoffConditions", fromLines(event.target.value))} value={toLines(selectedConfig.handoffConditions)} />
-                </LabeledField>
-                <LabeledField label="Fallback agent">
-                  <input className={inputStyles} onChange={(event) => updateConfig(activeAgentId, "fallbackAgentId", event.target.value)} type="text" value={selectedConfig.fallbackAgentId ?? ""} />
-                </LabeledField>
-                <LabeledField label="Blocked route">
-                  <input className={inputStyles} onChange={(event) => updateConfig(activeAgentId, "blockedRoute", event.target.value)} type="text" value={selectedConfig.blockedRoute ?? ""} />
-                </LabeledField>
-                <LabeledField label="Human pause route">
-                  <input className={inputStyles} onChange={(event) => updateConfig(activeAgentId, "humanPauseRoute", event.target.value)} type="text" value={selectedConfig.humanPauseRoute ?? ""} />
-                </LabeledField>
-                <LabeledField label="Retry policy">
-                  <input className={inputStyles} onChange={(event) => updateConfig(activeAgentId, "retryPolicy", event.target.value)} type="text" value={selectedConfig.retryPolicy ?? ""} />
-                </LabeledField>
-                <LabeledField label="Max retries">
-                  <input className={inputStyles} min={0} onChange={(event) => updateConfig(activeAgentId, "maxRetries", Number(event.target.value) || 0)} type="number" value={selectedConfig.maxRetries} />
-                </LabeledField>
-              </div>
-            </ControlPanel>
-            ) : null}
-          </div>
+              {activeDetailTab === "routing" ? (
+                <ControlPanel className="p-4">
+                  <div className="flex items-center gap-2">
+                    <StatusDot tone="blue" />
+                    <h3 className="text-sm font-semibold text-slate-100">Routing & Handoff</h3>
+                  </div>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <LabeledField label="Next agent IDs">
+                      <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "nextAgentIds", fromLines(event.target.value))} value={toLines(selectedConfig.nextAgentIds)} />
+                    </LabeledField>
+                    <LabeledField label="Handoff conditions">
+                      <textarea className={textareaStyles} onChange={(event) => updateConfig(activeAgentId, "handoffConditions", fromLines(event.target.value))} value={toLines(selectedConfig.handoffConditions)} />
+                    </LabeledField>
+                    <LabeledField label="Fallback agent">
+                      <input className={inputStyles} onChange={(event) => updateConfig(activeAgentId, "fallbackAgentId", event.target.value)} type="text" value={selectedConfig.fallbackAgentId ?? ""} />
+                    </LabeledField>
+                    <LabeledField label="Blocked route">
+                      <input className={inputStyles} onChange={(event) => updateConfig(activeAgentId, "blockedRoute", event.target.value)} type="text" value={selectedConfig.blockedRoute ?? ""} />
+                    </LabeledField>
+                    <LabeledField label="Human pause route">
+                      <input className={inputStyles} onChange={(event) => updateConfig(activeAgentId, "humanPauseRoute", event.target.value)} type="text" value={selectedConfig.humanPauseRoute ?? ""} />
+                    </LabeledField>
+                    <LabeledField label="Retry policy">
+                      <input className={inputStyles} onChange={(event) => updateConfig(activeAgentId, "retryPolicy", event.target.value)} type="text" value={selectedConfig.retryPolicy ?? ""} />
+                    </LabeledField>
+                    <LabeledField label="Max retries">
+                      <input className={inputStyles} min={0} onChange={(event) => updateConfig(activeAgentId, "maxRetries", Number(event.target.value) || 0)} type="number" value={selectedConfig.maxRetries} />
+                    </LabeledField>
+                  </div>
+                </ControlPanel>
+              ) : null}
+            </div>
           ) : null}
 
           {activeDetailTab === "runtime" || activeDetailTab === "runs" ? (
-          <div className="space-y-4">
-            {activeDetailTab === "runtime" ? (
-            <ControlPanel className="p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-100">Runtime Status</p>
-                  <p className="mt-1 text-xs text-slate-400">Reactive runtime shape for future live LangGraph execution.</p>
-                </div>
-                <StatusBadge tone={tone(selectedRuntime.status)}>{statusLabel(selectedRuntime.status)}</StatusBadge>
-              </div>
-              <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/65 p-3">
-                <div className="flex items-center gap-3">
-                  <AgentActivityBars active={selectedRuntime.isRunning || selectedRuntime.status === "running"} />
-                  <div>
-                    <p className="text-sm font-semibold text-slate-100">{selectedRuntime.currentTaskLabel ?? "No live task"}</p>
-                    <p className="mt-1 text-xs leading-5 text-slate-400">{selectedRuntime.currentTaskDetail ?? "Runtime is ready for future live execution updates."}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4 grid gap-3 text-sm text-slate-300">
-                <div className="flex items-center justify-between gap-3"><span>Last started</span><span className="text-slate-100">{formatTimestamp(selectedRuntime.lastStartedAt)}</span></div>
-                <div className="flex items-center justify-between gap-3"><span>Last finished</span><span className="text-slate-100">{formatTimestamp(selectedRuntime.lastFinishedAt)}</span></div>
-                <div className="flex items-center justify-between gap-3"><span>Last run ID</span><span className="truncate text-slate-100">{selectedRuntime.lastRunId ?? "Not available"}</span></div>
-              </div>
-              <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/65 p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Last output summary</p>
-                <p className="mt-2 text-sm leading-6 text-slate-200">{selectedRuntime.lastOutputSummary ?? "No output summary recorded."}</p>
-              </div>
-              {selectedRuntime.lastError ? (
-                <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-rose-200">Last error</p>
-                  <p className="mt-2 text-sm leading-6 text-rose-100">{selectedRuntime.lastError}</p>
-                </div>
-              ) : null}
-            </ControlPanel>
-            ) : null}
-
-            {activeDetailTab === "runs" ? (
-            <ControlPanel className="p-4">
-              <p className="text-sm font-semibold text-slate-100">Recent Runs</p>
-              <div className="mt-4 space-y-3">
-                {selectedRuns.length ? selectedRuns.slice(0, 5).map((run) => (
-                  <div key={run.runId} className="rounded-xl border border-slate-800 bg-slate-950/65 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="truncate text-sm font-semibold text-slate-100">{run.runId}</p>
-                      <StatusBadge tone={tone(run.status)}>{statusLabel(run.status)}</StatusBadge>
+            <div className="space-y-4">
+              {activeDetailTab === "runtime" ? (
+                <ControlPanel className="p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-100">Runtime Status</p>
+                      <p className="mt-1 text-xs text-slate-400">Reactive runtime shape for future live LangGraph execution.</p>
                     </div>
-                    <p className="mt-2 text-xs text-slate-400">{formatTimestamp(run.startedAt)}{run.finishedAt ? ` → ${formatTimestamp(run.finishedAt)}` : " → running"}</p>
-                    <p className="mt-2 text-sm leading-6 text-slate-300">{run.outputSummary ?? "No output summary recorded."}</p>
-                    <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-sky-200">Open details</p>
+                    <StatusBadge tone={tone(selectedRuntime.status)}>{statusLabel(selectedRuntime.status)}</StatusBadge>
                   </div>
-                )) : (
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/65 p-3 text-sm text-slate-300">
-                    No runs recorded for this agent yet.
+                  <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/65 p-3">
+                    <div className="flex items-center gap-3">
+                      <AgentActivityBars active={selectedRuntime.isRunning || selectedRuntime.status === "running"} />
+                      <div>
+                        <p className="text-sm font-semibold text-slate-100">{selectedRuntime.currentTaskLabel ?? "No live task"}</p>
+                        <p className="mt-1 text-xs leading-5 text-slate-400">{selectedRuntime.currentTaskDetail ?? "Runtime is ready for future live execution updates."}</p>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
-            </ControlPanel>
-            ) : null}
-          </div>
+                  <div className="mt-4 grid gap-3 text-sm text-slate-300">
+                    <div className="flex items-center justify-between gap-3"><span>Last started</span><span className="text-slate-100">{formatTimestamp(selectedRuntime.lastStartedAt)}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span>Last finished</span><span className="text-slate-100">{formatTimestamp(selectedRuntime.lastFinishedAt)}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span>Last run ID</span><span className="truncate text-slate-100">{selectedRuntime.lastRunId ?? "Not available"}</span></div>
+                  </div>
+                  <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/65 p-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Last output summary</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-200">{selectedRuntime.lastOutputSummary ?? "No output summary recorded."}</p>
+                  </div>
+                  {selectedRuntime.lastError ? (
+                    <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3">
+                      <p className="text-xs font-bold uppercase tracking-[0.16em] text-rose-200">Last error</p>
+                      <p className="mt-2 text-sm leading-6 text-rose-100">{selectedRuntime.lastError}</p>
+                    </div>
+                  ) : null}
+                </ControlPanel>
+              ) : null}
+
+              {activeDetailTab === "runs" ? (
+                <ControlPanel className="p-4">
+                  <p className="text-sm font-semibold text-slate-100">Recent Runs</p>
+                  <div className="mt-4 space-y-3">
+                    {selectedRunsList.length ? selectedRunsList.slice(0, 5).map((run) => (
+                      <div key={run.runId} className="rounded-xl border border-slate-800 bg-slate-950/65 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="truncate text-sm font-semibold text-slate-100">{run.runId}</p>
+                          <StatusBadge tone={tone(run.status)}>{statusLabel(run.status)}</StatusBadge>
+                        </div>
+                        <p className="mt-2 text-xs text-slate-400">{formatTimestamp(run.startedAt)}{run.finishedAt ? ` → ${formatTimestamp(run.finishedAt)}` : " → running"}</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-300">{run.outputSummary ?? "No output summary recorded."}</p>
+                        <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-sky-200">Open details</p>
+                      </div>
+                    )) : (
+                      <div className="rounded-xl border border-slate-800 bg-slate-950/65 p-3 text-sm text-slate-300">
+                        No runs recorded for this agent yet.
+                      </div>
+                    )}
+                  </div>
+                </ControlPanel>
+              ) : null}
+            </div>
           ) : null}
         </section>
       </div>
@@ -790,7 +911,7 @@ export function LangGraphSection() {
             const runtime = runtimeMap[config.agentId];
             const nextLabel = config.nextAgentIds.length
               ? config.nextAgentIds
-                  .map((nextId) => configMap[nextId]?.displayName ?? nextId)
+                  .map((nextId) => effectiveConfigMap[nextId]?.displayName ?? nextId)
                   .join(", ")
               : "Workflow terminal node";
 

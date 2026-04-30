@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { AppConvexProvider } from "@/components/convex-provider";
 import { appBranding } from "@/lib/branding";
 import "./globals.css";
 
@@ -14,7 +15,9 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>{children}</body>
+      <body className={`${geistSans.variable} ${geistMono.variable}`}>
+        <AppConvexProvider>{children}</AppConvexProvider>
+      </body>
     </html>
   );
 }
