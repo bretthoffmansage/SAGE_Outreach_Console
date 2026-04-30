@@ -11,7 +11,7 @@ Sources: `PRD_SOURCE.md`, `CURRENT_STATE_AUDIT.md`, `MASTER_ROADMAP.md`
 ---
 
 ## PKG-001 — Scaffold Next.js App Foundation and Design Shell
-Status: ready
+Status: complete
 
 ### Purpose
 Create the production-oriented Next.js foundation for AI Campaign Desk: package/tooling config, App Router structure, Tailwind styling, core layout, responsive sidebar/top bar, base UI primitives, env documentation, and route placeholders for the PRD information architecture.
@@ -57,6 +57,14 @@ No app exists. All later work depends on a coherent Next.js/TypeScript/Tailwind 
 - Build passes.
 - Route shell visible in code for PRD IA.
 - Git commit with package changes and clean tree.
+
+### Completion notes
+Completed on 2026-04-30. Added Next.js 16 App Router foundation, TypeScript/Tailwind tooling, ESLint config, responsive app shell, sidebar/top bar navigation, reusable UI primitives, catch-all routed placeholders for the PRD information architecture, demo-safe hero/dashboard/workflow preview, and `.env.example` documentation.
+
+### Validation evidence
+- `npm run lint` passed.
+- `npm run build` passed.
+- `next-env.d.ts` was generated as an intentional Next.js scaffold file for this package and kept.
 
 ---
 
