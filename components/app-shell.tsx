@@ -142,6 +142,13 @@ export function AppShell({ children, title }: { children: ReactNode; title: stri
   const [searchOpen, setSearchOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [taskReturnContext, setTaskReturnContext] = useState<{
+    active: boolean;
+    source: "today";
+    destinationMode: "campaign" | "review" | "library" | "intelligence" | "operations";
+    taskId: string;
+    returnRoute: string;
+  } | null>(null);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const approvalCount = getPendingApprovalCount();
@@ -173,6 +180,57 @@ export function AppShell({ children, title }: { children: ReactNode; title: stri
   const closeSearch = () => {
     setSearchOpen(false);
     setQuery("");
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = window.sessionStorage.getItem("oc_task_return_context");
+    if (!raw) {
+      setTaskReturnContext(null);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw) as {
+        active?: boolean;
+        source?: "today";
+        destinationMode?: "campaign" | "review" | "library" | "intelligence" | "operations";
+        taskId?: string;
+        returnRoute?: string;
+      };
+      if (parsed.active && parsed.source === "today" && parsed.destinationMode && parsed.taskId && parsed.returnRoute) {
+        setTaskReturnContext({
+          active: true,
+          source: "today",
+          destinationMode: parsed.destinationMode,
+          taskId: parsed.taskId,
+          returnRoute: parsed.returnRoute,
+        });
+      } else {
+        window.sessionStorage.removeItem("oc_task_return_context");
+        setTaskReturnContext(null);
+      }
+    } catch {
+      window.sessionStorage.removeItem("oc_task_return_context");
+      setTaskReturnContext(null);
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!taskReturnContext?.active) return;
+    if (activeCategory.id !== taskReturnContext.destinationMode) {
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem("oc_task_return_context");
+      }
+      setTaskReturnContext(null);
+    }
+  }, [activeCategory.id, taskReturnContext]);
+
+  const backToTasks = () => {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem("oc_task_return_context");
+    }
+    setTaskReturnContext(null);
+    router.push("/dashboard");
   };
 
   return (
@@ -283,8 +341,8 @@ export function AppShell({ children, title }: { children: ReactNode; title: stri
           </header>
           <div className="min-h-[calc(100vh-4.5rem)] bg-transparent px-4 py-5 md:px-6">
             <div className="mx-auto mb-5 max-w-[96rem] overflow-x-auto">
-              <div className="flex min-w-max gap-2 rounded-xl border border-slate-800 bg-slate-950/60 p-2">
-                {activeCategory.children.map((child) => {
+              <div className={cn(activeCategory.id === "home" ? "" : "flex min-w-max gap-2 rounded-xl border border-slate-800 bg-slate-950/60 p-2")}>
+                {activeCategory.id === "home" ? null : activeCategory.children.map((child) => {
                   const isActive = activeChild.href === child.href;
                   return (
                     <Link
@@ -302,6 +360,17 @@ export function AppShell({ children, title }: { children: ReactNode; title: stri
                 })}
               </div>
             </div>
+            {taskReturnContext?.active && activeCategory.id === taskReturnContext.destinationMode ? (
+              <div className="mx-auto mb-4 max-w-[96rem]">
+                <button
+                  className="focus-ring inline-flex items-center rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-800"
+                  onClick={backToTasks}
+                  type="button"
+                >
+                  Back to Tasks
+                </button>
+              </div>
+            ) : null}
             {children}
           </div>
         </main>

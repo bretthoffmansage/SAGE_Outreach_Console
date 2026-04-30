@@ -7,6 +7,7 @@ import {
   GitBranch,
   Inbox,
   LayoutDashboard,
+  Home,
   MailCheck,
   Megaphone,
   MessageCircle,
@@ -32,7 +33,7 @@ export type NavChild = {
 };
 
 export type NavCategory = {
-  id: "control" | "review" | "library" | "intelligence" | "operations";
+  id: "home" | "campaign" | "review" | "library" | "intelligence" | "operations";
   title: string;
   icon: LucideIcon;
   defaultHref: string;
@@ -41,12 +42,20 @@ export type NavCategory = {
 
 export const navGroups: NavCategory[] = [
   {
-    id: "control",
-    title: "Control",
-    icon: LayoutDashboard,
+    id: "home",
+    title: "Home",
+    icon: Home,
     defaultHref: "/dashboard",
     children: [
-      { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard, description: "Today’s campaign command view.", match: "exact" },
+      { title: "Today", href: "/dashboard", icon: LayoutDashboard, description: "Today’s campaign command view.", match: "exact" },
+    ],
+  },
+  {
+    id: "campaign",
+    title: "Campaign",
+    icon: Megaphone,
+    defaultHref: "/campaigns",
+    children: [
       { title: "Campaigns", href: "/campaigns", icon: Megaphone, description: "Lifecycle, status, and next actions.", match: "prefix", excludedPrefixes: ["/campaigns/new", "/campaigns/create"] },
       { title: "Create Campaign", href: "/campaigns/new", icon: PenLine, description: "Guided campaign intake.", match: "prefix", activePrefixes: ["/campaigns/new", "/campaigns/create"] },
     ],

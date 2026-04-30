@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { BrainCircuit, MailCheck, Play, Send, Sparkles } from "lucide-react";
 import { approvals, campaigns, integrations, libraryItems, performanceSnapshots, responses, users } from "@/lib/data/demo-data";
 import type { Campaign } from "@/lib/domain";
@@ -22,6 +23,7 @@ import {
   Th,
   TableHead,
 } from "@/components/ui";
+import { cn } from "@/lib/utils";
 
 const filters = ["All", "Needs Bari", "Needs Blue", "Ready for Keap", "Sent", "Learning", "Blocked"];
 
@@ -129,6 +131,16 @@ function lastActivityForCampaign(campaign: Campaign) {
   return new Date(campaign.updatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+function formatTimestamp(value?: number) {
+  if (!value) return "Not available";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
 function PipelineMap() {
   return (
     <ControlPanel className="p-4">
@@ -155,168 +167,281 @@ function PipelineMap() {
 }
 
 export function DashboardSection() {
-  const reviewQueues: Array<{ title: string; href: string; owner: "bari" | "blue" | "internal" }> = [
-    { title: "Bari Copy Review", href: "/reviews/bari", owner: "bari" },
-    { title: "Blue Review", href: "/reviews/blue", owner: "blue" },
-    { title: "Internal Approvals", href: "/reviews/internal", owner: "internal" },
-  ];
-  const priorityCampaigns = campaigns.filter((campaign) =>
-    campaign.status === "blocked" ||
-    campaign.status === "needs_bari_review" ||
-    campaign.status === "needs_blue_review" ||
-    campaign.status === "needs_internal_review" ||
-    campaign.status === "ready_for_keap",
-  ).slice(0, 5);
-  const compactSignals = responseSignals.filter((signal) => signal.label === "Needs Reply" || signal.label === "Hot Leads" || signal.label === "Questions");
-  const agentActivity = agentRack.filter((agent) => ["running", "waiting", "blocked", "error"].includes(agent.state));
-  const integrationIssues = integrations.filter((integration) => integration.status === "manual_mode" || integration.status === "missing_credentials" || integration.status === "error");
+  type TodayTask = {
+    id: string;
+    title: string;
+    context: string;
+    category: string;
+    priority: "green" | "amber" | "red" | "blue" | "gray";
+    sourceRoute: string;
+    sourceLabel: string;
+    createdAt: number;
+    completedAt?: number;
+    status: "current" | "completed";
+  };
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<"current" | "history">("current");
+  const [tasks, setTasks] = useState<TodayTask[]>(() => {
+    const now = Date.now();
+    const firstResponse = responses[0];
+    const firstCampaign = campaigns[0];
+    const firstIntegrationIssue = integrations.find((integration) => integration.status === "manual_mode" || integration.status === "missing_credentials" || integration.status === "error");
+    return [
+      {
+        id: "task-bari-copy-review",
+        title: "Approve reactivation founder email",
+        context: "Cold Lead Reactivation — May Week 2",
+        category: "Bari Copy Review",
+        priority: "amber",
+        sourceRoute: "/reviews/bari",
+        sourceLabel: "Review / Bari Copy Review",
+        createdAt: now - 1000 * 60 * 70,
+        status: "current",
+      },
+      {
+        id: "task-blue-review",
+        title: "Review webinar promise and urgency language",
+        context: "SAGE Webinar Invitation — June",
+        category: "Blue Review",
+        priority: "red",
+        sourceRoute: "/reviews/blue",
+        sourceLabel: "Review / Blue Review",
+        createdAt: now - 1000 * 60 * 55,
+        status: "current",
+      },
+      {
+        id: "task-internal-approval",
+        title: "Confirm Keap handoff checklist",
+        context: firstCampaign?.name ?? "Founder Nurture Sequence Refresh",
+        category: "Internal Approval",
+        priority: "amber",
+        sourceRoute: "/reviews/internal",
+        sourceLabel: "Review / Internal Approvals",
+        createdAt: now - 1000 * 60 * 45,
+        status: "current",
+      },
+      {
+        id: "task-response-intelligence",
+        title: "Reply needed from interested lead",
+        context: firstResponse?.summary ?? "Lead is interested but unsure whether SAGE is beginner-friendly",
+        category: "Response Intelligence",
+        priority: "amber",
+        sourceRoute: "/intelligence/responses",
+        sourceLabel: "Intelligence / Response Intelligence",
+        createdAt: now - 1000 * 60 * 40,
+        status: "current",
+      },
+      {
+        id: "task-integrations",
+        title: "Configure missing credentials",
+        context: firstIntegrationIssue ? `${firstIntegrationIssue.name} is still in manual/demo mode.` : "Some integrations are still in manual/demo mode.",
+        category: "Integration",
+        priority: "amber",
+        sourceRoute: "/operations/integrations",
+        sourceLabel: "Operations / Integrations",
+        createdAt: now - 1000 * 60 * 30,
+        status: "current",
+      },
+      {
+        id: "task-campaign-export",
+        title: "Prepare manual Keap export",
+        context: firstCampaign?.name ?? "Founder Nurture Sequence Refresh",
+        category: "Campaign",
+        priority: "green",
+        sourceRoute: "/campaigns",
+        sourceLabel: "Control / Campaigns",
+        createdAt: now - 1000 * 60 * 20,
+        status: "current",
+      },
+    ];
+  });
+  const [undoTaskId, setUndoTaskId] = useState<string | null>(null);
+  const [undoVisible, setUndoVisible] = useState(false);
+  const TASK_RETURN_KEY = "oc_task_return_context";
+
+  const currentTasks = tasks.filter((task) => task.status === "current");
+  const historyTasks = tasks.filter((task) => task.status === "completed");
+
+  useEffect(() => {
+    if (!undoTaskId) return;
+    setUndoVisible(true);
+    const timer = window.setTimeout(() => {
+      setUndoVisible(false);
+      const cleanup = window.setTimeout(() => setUndoTaskId(null), 220);
+      return () => window.clearTimeout(cleanup);
+    }, 4000);
+    return () => window.clearTimeout(timer);
+  }, [undoTaskId]);
+
+  const completeTask = (taskId: string) => {
+    setTasks((current) => current.map((task) => (
+      task.id === taskId
+        ? { ...task, status: "completed", completedAt: Date.now() }
+        : task
+    )));
+    setUndoTaskId(taskId);
+    setUndoVisible(true);
+  };
+
+  const restoreTask = (taskId: string) => {
+    setTasks((current) => current.map((task) => (
+      task.id === taskId
+        ? { ...task, status: "current", completedAt: undefined }
+        : task
+    )));
+    if (undoTaskId === taskId) {
+      setUndoTaskId(null);
+      setUndoVisible(false);
+    }
+  };
+
+  const undoLastComplete = () => {
+    if (!undoTaskId) return;
+    restoreTask(undoTaskId);
+  };
+
+  const destinationModeForRoute = (route: string): "campaign" | "review" | "library" | "intelligence" | "operations" => {
+    if (route.startsWith("/reviews")) return "review";
+    if (route.startsWith("/libraries")) return "library";
+    if (route.startsWith("/intelligence")) return "intelligence";
+    if (route.startsWith("/operations")) return "operations";
+    return "campaign";
+  };
+
+  const navigateFromTask = (task: TodayTask) => {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(
+        TASK_RETURN_KEY,
+        JSON.stringify({
+          active: true,
+          source: "today",
+          destinationMode: destinationModeForRoute(task.sourceRoute),
+          taskId: task.id,
+          returnRoute: "/dashboard",
+        }),
+      );
+    }
+    router.push(task.sourceRoute);
+  };
+
+  const priorityTone = (priority: TodayTask["priority"]) => {
+    if (priority === "red") return "red";
+    if (priority === "amber") return "amber";
+    if (priority === "green") return "green";
+    if (priority === "blue") return "blue";
+    return "gray";
+  };
 
   return (
     <div className="space-y-5">
       <SectionHeader
-        eyebrow="CONTROL ROOM"
-        title="Campaign Control Console"
-        description="Monitor campaign stages, priority reviews, response signals, and system activity."
+        eyebrow="TODAY"
+        title="Today"
+        description="A focused list of current tasks, approvals, replies, and system items that need attention."
       />
-
-      <PipelineMap />
-
-      <section className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
-        <ControlPanel className="p-4">
-          <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
-            <div>
-              <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Campaigns Needing Attention</p>
-              <p className="mt-1 text-sm text-slate-300">Priority campaign records that need human action now.</p>
-            </div>
-            <Link href="/campaigns"><Button variant="secondary">View All</Button></Link>
-          </div>
-          <div className="mt-4">
-            <ConsoleTable>
-              <TableHead>
-                <tr>
-                  <Th>Campaign</Th>
-                  <Th>Stage</Th>
-                  <Th>Risk</Th>
-                  <Th>Next action</Th>
-                  <Th>Owner</Th>
-                  <Th>Action</Th>
-                </tr>
-              </TableHead>
-              <tbody>
-                {priorityCampaigns.map((campaign) => (
-                  <tr key={campaign.id}>
-                    <Td>
-                      <div>
-                        <p className="font-semibold text-slate-100">{campaign.name}</p>
-                        <p className="mt-1 text-xs text-slate-400">{campaign.goal} · {campaign.audience}</p>
-                      </div>
-                    </Td>
-                    <Td>{stageForCampaign(campaign)}</Td>
-                    <Td><StatusBadge tone={riskTone(campaign.riskLevel)}>{campaign.riskLevel}</StatusBadge></Td>
-                    <Td className="max-w-[16rem] text-slate-300">{campaign.nextAction}</Td>
-                    <Td>{ownerName(campaign)}</Td>
-                    <Td>
-                      <Link href={`/campaigns/${campaign.id}`}><InlineAction>Open</InlineAction></Link>
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </ConsoleTable>
-          </div>
-        </ControlPanel>
-
-        <div className="grid gap-4">
-          <ControlPanel className="p-4">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
-              <div>
-                <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Priority Reviews</p>
-                <p className="mt-1 text-sm text-slate-300">Queues with immediate decision pressure.</p>
-              </div>
-              <Link href="/reviews/all" className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">View all approvals</Link>
-            </div>
-            <ConsoleTable className="mt-4">
-              <TableHead>
-                <tr>
-                  <Th>Queue</Th>
-                  <Th>Waiting</Th>
-                  <Th>Highest risk</Th>
-                  <Th>Next item</Th>
-                  <Th>Open</Th>
-                </tr>
-              </TableHead>
-              <tbody>
-                {reviewQueues.map((queue) => {
-                  const summary = queueSummary(queue.owner);
-                  return (
-                    <tr key={queue.title}>
-                      <Td>{queue.title}</Td>
-                      <Td>{summary.pending.length}</Td>
-                      <Td><StatusBadge tone={summary.highestRisk}>{summary.highestRisk}</StatusBadge></Td>
-                      <Td className="max-w-[14rem] text-slate-300">{summary.topItem?.title ?? "No waiting items"}</Td>
-                      <Td><Link href={queue.href}><InlineAction>Open</InlineAction></Link></Td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </ConsoleTable>
-          </ControlPanel>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <button onClick={() => setActiveTab("current")} type="button">
+            <Pill tone={activeTab === "current" ? "blue" : "gray"}>Current {currentTasks.length}</Pill>
+          </button>
+          <button onClick={() => setActiveTab("history")} type="button">
+            <Pill tone={activeTab === "history" ? "blue" : "gray"}>History {historyTasks.length}</Pill>
+          </button>
         </div>
-      </section>
+        {activeTab === "current" ? (
+          <p className="text-xs text-slate-400">Click box to complete task</p>
+        ) : null}
+      </div>
 
-      <section className="grid gap-4 xl:grid-cols-2">
-        <QueueLane
-          title="Response Signals"
-          count={responses.length}
-          tone="blue"
-          subtitle="Only urgent/non-zero signals are shown here."
-          action={<Link href="/intelligence/responses" className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">Open Response Intelligence</Link>}
-        >
-          <SignalList
-            items={[
-              ...compactSignals,
-              { label: "No auto-send", value: "Active", tone: "red", detail: "Replies remain manual draft-only." },
-            ]}
-          />
-        </QueueLane>
-
-        <ControlPanel className="p-4">
-          <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
-            <div>
-              <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Agent Activity</p>
-              <p className="mt-1 text-sm text-slate-300">Only agents needing attention are shown.</p>
-            </div>
-            <div className="flex gap-3">
-              <Link href="/intelligence/langgraph" className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">View Agent Map</Link>
-              <Link href="/intelligence/agent-runs" className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">Agent Runs</Link>
-            </div>
+      <ControlPanel className="relative p-3">
+        {undoTaskId ? (
+          <div
+            className={cn(
+              "pointer-events-auto absolute right-3 top-3 z-10 rounded-lg border border-slate-700 bg-slate-900/95 px-3 py-2 text-xs text-slate-200 transition-opacity duration-200",
+              undoVisible ? "opacity-100" : "opacity-0",
+            )}
+          >
+            <button className="focus-ring font-semibold text-sky-200" onClick={undoLastComplete} type="button">
+              Undo
+            </button>
           </div>
-          {agentActivity.length ? (
-            <div className="mt-4 grid gap-3">
-              {agentActivity.map((agent) => (
-                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3" key={agent.label}>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-slate-100">{agent.label}</p>
-                    <StatusBadge tone={agent.tone}>{agent.state}</StatusBadge>
-                  </div>
-                  <p className="mt-1 text-xs text-slate-300">{agent.meta}</p>
+        ) : null}
+
+        <div className="max-h-[68vh] space-y-2 overflow-auto pr-1">
+          {activeTab === "current" ? (
+            currentTasks.length ? currentTasks.map((task) => (
+              <div
+                className="focus-ring flex w-full items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-3 text-left transition hover:border-slate-700 hover:bg-slate-900/80"
+                key={task.id}
+                onClick={() => navigateFromTask(task)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    navigateFromTask(task);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                <StatusBadge tone={priorityTone(task.priority)}>{task.category}</StatusBadge>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-100">{task.title}</p>
+                  <p className="mt-1 truncate text-xs text-slate-300">{task.context}</p>
+                  <p className="mt-1 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-400">{task.sourceLabel}</p>
                 </div>
-              ))}
-            </div>
+                <button
+                  aria-label={`Complete ${task.title}`}
+                  className="focus-ring grid h-6 w-6 shrink-0 place-items-center rounded border border-slate-600 bg-slate-900 text-slate-300"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    completeTask(task.id);
+                  }}
+                  type="button"
+                />
+              </div>
+            )) : (
+              <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/70 px-4 py-8 text-center text-sm text-slate-300">
+                No current tasks. You&apos;re clear for now.
+              </div>
+            )
           ) : (
-            <p className="mt-4 text-sm text-slate-300">No active agent runs.</p>
+            historyTasks.length ? historyTasks.map((task) => (
+              <div
+                className="focus-ring flex w-full items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-3 text-left transition hover:border-slate-700 hover:bg-slate-900/80"
+                key={task.id}
+                onClick={() => navigateFromTask(task)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    navigateFromTask(task);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                <StatusBadge tone="gray">{task.category}</StatusBadge>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-100">{task.title}</p>
+                  <p className="mt-1 truncate text-xs text-slate-300">{task.context}</p>
+                  <p className="mt-1 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-400">{task.sourceLabel} · Completed {formatTimestamp(task.completedAt)}</p>
+                </div>
+                <button
+                  className="focus-ring rounded-md border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-800"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    restoreTask(task.id);
+                  }}
+                  type="button"
+                >
+                  Restore
+                </button>
+              </div>
+            )) : (
+              <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/70 px-4 py-8 text-center text-sm text-slate-300">
+                No completed items yet.
+              </div>
+            )
           )}
-        </ControlPanel>
-      </section>
-
-      <ControlPanel className="p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">System Status</p>
-            <p className="mt-1 text-sm text-slate-300">Demo mode active · Human approval gate active · {integrationIssues.length} integration item(s) need credentials/manual setup.</p>
-          </div>
-          <Link href="/operations/integrations" className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">
-            Open Integrations
-          </Link>
         </div>
       </ControlPanel>
     </div>
