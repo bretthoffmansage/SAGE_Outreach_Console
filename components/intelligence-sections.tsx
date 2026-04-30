@@ -41,6 +41,58 @@ const actionButtonStyles = "focus-ring inline-flex items-center justify-center g
 const inputStyles = "console-field-control focus-ring w-full rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-slate-100 placeholder:text-slate-500";
 const textareaStyles = `${inputStyles} min-h-[120px] resize-y`;
 
+function sanitizeAgentConfigForConvex(config: AgentConfigRecord) {
+  return {
+    agentId: config.agentId,
+    displayName: config.displayName,
+    shortDescription: config.shortDescription,
+    workflowOrder: config.workflowOrder,
+    category: config.category,
+    enabled: config.enabled,
+    systemPrompt: config.systemPrompt,
+    taskPromptTemplate: config.taskPromptTemplate,
+    styleGuidance: config.styleGuidance,
+    requiredContextSources: config.requiredContextSources,
+    exampleReferences: config.exampleReferences,
+    preferredProvider: config.preferredProvider,
+    preferredModel: config.preferredModel,
+    temperature: config.temperature,
+    maxTokens: config.maxTokens,
+    structuredOutputRequired: config.structuredOutputRequired,
+    inputSchemaJson: config.inputSchemaJson,
+    outputSchemaJson: config.outputSchemaJson,
+    requiredInputs: config.requiredInputs,
+    optionalInputs: config.optionalInputs,
+    requiredOutputs: config.requiredOutputs,
+    escalationMarkers: config.escalationMarkers,
+    confidenceField: config.confidenceField,
+    riskField: config.riskField,
+    activeRules: config.activeRules,
+    blockingRules: config.blockingRules,
+    warningRules: config.warningRules,
+    allowedActions: config.allowedActions,
+    disallowedActions: config.disallowedActions,
+    humanApprovalRequired: config.humanApprovalRequired,
+    canCreateApprovalItems: config.canCreateApprovalItems,
+    canModifyCopy: config.canModifyCopy,
+    canReadLibraries: config.canReadLibraries,
+    canTriggerIntegrations: config.canTriggerIntegrations,
+    nextAgentIds: config.nextAgentIds,
+    fallbackAgentId: config.fallbackAgentId,
+    blockedRoute: config.blockedRoute,
+    humanPauseRoute: config.humanPauseRoute,
+    handoffConditions: config.handoffConditions,
+    retryPolicy: config.retryPolicy,
+    maxRetries: config.maxRetries,
+    configVersion: config.configVersion,
+    lastEditedBy: config.lastEditedBy,
+    lastEditedAt: config.lastEditedAt,
+    notes: config.notes,
+    updatedAt: Date.now(),
+    updatedBy: config.lastEditedBy,
+  };
+}
+
 function formatTimestamp(value?: number) {
   if (!value) return "Not available";
 
@@ -301,7 +353,7 @@ export function LangGraphSection() {
       await upsertAgentConfig({
         agentId: selectedAgentId,
         patch: {
-          ...selectedConfig,
+          ...sanitizeAgentConfigForConvex(selectedConfig),
           configVersion: (persistedConfigMap[selectedAgentId]?.configVersion ?? selectedConfig.configVersion) + 1,
           lastEditedAt: savedAt,
           lastEditedBy: "demo_operator",
@@ -334,7 +386,7 @@ export function LangGraphSection() {
       await upsertAgentConfig({
         agentId: selectedAgentId,
         patch: {
-          ...fallbackConfig,
+          ...sanitizeAgentConfigForConvex(fallbackConfig),
           configVersion: (persistedConfigMap[selectedAgentId]?.configVersion ?? fallbackConfig.configVersion) + 1,
           lastEditedAt: savedAt,
           lastEditedBy: "demo_operator",

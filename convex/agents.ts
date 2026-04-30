@@ -20,6 +20,64 @@ function runSort(left: { startedAt: number }, right: { startedAt: number }) {
   return right.startedAt - left.startedAt;
 }
 
+function sanitizeAgentConfigForConvex(config: Record<string, unknown>) {
+  const next = {
+    agentId: config.agentId,
+    displayName: config.displayName,
+    shortDescription: config.shortDescription,
+    workflowOrder: config.workflowOrder,
+    category: config.category,
+    enabled: config.enabled,
+    systemPrompt: config.systemPrompt,
+    taskPromptTemplate: config.taskPromptTemplate,
+    styleGuidance: config.styleGuidance,
+    requiredContextSources: config.requiredContextSources,
+    exampleReferences: config.exampleReferences,
+    preferredProvider: config.preferredProvider,
+    preferredModel: config.preferredModel,
+    temperature: config.temperature,
+    maxTokens: config.maxTokens,
+    structuredOutputRequired: config.structuredOutputRequired,
+    inputSchemaJson: typeof config.inputSchemaJson === "string"
+      ? config.inputSchemaJson
+      : JSON.stringify(config.inputSchemaJson ?? {}, null, 2),
+    outputSchemaJson: typeof config.outputSchemaJson === "string"
+      ? config.outputSchemaJson
+      : JSON.stringify(config.outputSchemaJson ?? {}, null, 2),
+    requiredInputs: config.requiredInputs,
+    optionalInputs: config.optionalInputs,
+    requiredOutputs: config.requiredOutputs,
+    escalationMarkers: config.escalationMarkers,
+    confidenceField: config.confidenceField,
+    riskField: config.riskField,
+    activeRules: config.activeRules,
+    blockingRules: config.blockingRules,
+    warningRules: config.warningRules,
+    allowedActions: config.allowedActions,
+    disallowedActions: config.disallowedActions,
+    humanApprovalRequired: config.humanApprovalRequired,
+    canCreateApprovalItems: config.canCreateApprovalItems,
+    canModifyCopy: config.canModifyCopy,
+    canReadLibraries: config.canReadLibraries,
+    canTriggerIntegrations: config.canTriggerIntegrations,
+    nextAgentIds: config.nextAgentIds,
+    fallbackAgentId: config.fallbackAgentId,
+    blockedRoute: config.blockedRoute,
+    humanPauseRoute: config.humanPauseRoute,
+    handoffConditions: config.handoffConditions,
+    retryPolicy: config.retryPolicy,
+    maxRetries: config.maxRetries,
+    configVersion: config.configVersion,
+    lastEditedBy: config.lastEditedBy,
+    lastEditedAt: config.lastEditedAt,
+    notes: config.notes,
+    updatedAt: config.updatedAt,
+    updatedBy: config.updatedBy,
+  } satisfies Record<string, unknown>;
+
+  return Object.fromEntries(Object.entries(next).filter(([, value]) => value !== undefined));
+}
+
 export const listAgentConfigs = query({
   args: {},
   handler: async (ctx) => {
@@ -42,7 +100,7 @@ export const upsertAgentConfig = mutation({
     const base = stripSystemFields(existing) as Record<string, unknown>;
     const fallback = defaultAgentConfigs.find((config) => config.agentId === args.agentId);
     const now = Date.now();
-    const next = {
+    const next = sanitizeAgentConfigForConvex({
       ...fallback,
       ...base,
       ...args.patch,
@@ -50,7 +108,7 @@ export const upsertAgentConfig = mutation({
       updatedAt: typeof args.patch.updatedAt === "number" ? args.patch.updatedAt : now,
       updatedBy: typeof args.patch.updatedBy === "string" ? args.patch.updatedBy : (args.patch.lastEditedBy as string | undefined),
       lastEditedAt: typeof args.patch.lastEditedAt === "number" ? args.patch.lastEditedAt : now,
-    };
+    });
 
     if (existing?._id) {
       await ctx.db.patch(existing._id, next);
@@ -72,11 +130,11 @@ export const seedDefaultAgentConfigsIfEmpty = mutation({
 
     const timestamp = Date.now();
     for (const config of defaultAgentConfigs) {
-      await ctx.db.insert("agentConfigs", {
+      await ctx.db.insert("agentConfigs", sanitizeAgentConfigForConvex({
         ...config,
         updatedAt: config.lastEditedAt ?? timestamp,
         updatedBy: config.lastEditedBy,
-      });
+      }) as any);
     }
 
     return { seeded: true, inserted: defaultAgentConfigs.length };
@@ -273,11 +331,11 @@ export const seedDefaultAgentDataIfEmpty = mutation({
 
     if (!existingConfigs.length) {
       for (const config of defaultAgentConfigs) {
-        await ctx.db.insert("agentConfigs", {
+        await ctx.db.insert("agentConfigs", sanitizeAgentConfigForConvex({
           ...config,
           updatedAt: config.lastEditedAt ?? timestamp,
           updatedBy: config.lastEditedBy,
-        });
+        }) as any);
       }
       seededConfigs = defaultAgentConfigs.length;
     }
