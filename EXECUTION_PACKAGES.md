@@ -117,7 +117,7 @@ Completed on 2026-04-30. Added Convex dependency and schema scaffold, shared dom
 ---
 
 ## PKG-003 — Dashboard and Campaign Lifecycle
-Status: draft
+Status: ready
 
 ### Purpose
 Implement dashboard, campaign list, campaign intake, campaign detail tabs, statuses, summary cards, next actions, approval state, and Keap readiness indicators.
@@ -125,8 +125,28 @@ Implement dashboard, campaign list, campaign intake, campaign detail tabs, statu
 ### PRD coverage
 `PRD-008`, `PRD-025.1`, `PRD-027`
 
-### Scope
-To be expanded after PKG-002 data contracts are complete.
+### Why now
+PKG-002 added shared campaign, approval, integration, performance, and demo data contracts. The central campaign lifecycle can now become the first real product workflow surface.
+
+### Expanded scope
+- Replace generic dashboard placeholders with data-backed command-center cards for active campaigns, Bari/Blue approvals, ready-for-Keap, responses, integration health, and recent activity.
+- Implement `/campaigns` as a campaign lifecycle list using seeded campaign records, statuses, risk, owner/audience/offer, pending approvals, and next actions.
+- Implement `/campaigns/new` as a guided intake UI scaffold with PRD intake sections and fields, ending with a Run Campaign Agent Workflow CTA.
+- Implement `/campaigns/[campaignId]` as a detail view scaffold with tabs/sections for Overview, Brief, Copy, Approvals, Agent Runs, Keap Prep, Responses, Performance, and Learning.
+- Keep all state read-only/demo for now; mutating create/update actions are deferred.
+
+### Out of scope
+- Persisted create/edit campaign mutations.
+- Full review queue actions; PKG-004 owns approval actions.
+- Real agent workflow execution; PKG-006 owns execution.
+
+### Required checks
+- `npm run lint`
+- `npm run build`
+
+### Regression checks
+- Dashboard, `/campaigns`, `/campaigns/new`, and seeded campaign detail route compile without live credentials.
+- Existing navigation and generic route placeholders still compile.
 
 ---
 
