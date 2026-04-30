@@ -158,7 +158,7 @@ Completed on 2026-04-30. Added data-backed dashboard command cards and recent ac
 ---
 
 ## PKG-004 — Bari, Blue, Internal, and All Approval Queues
-Status: draft
+Status: ready
 
 ### Purpose
 Implement human approval consoles and actions with non-technical UX for Bari/Blue and operational controls for internal reviewers.
@@ -166,8 +166,28 @@ Implement human approval consoles and actions with non-technical UX for Bari/Blu
 ### PRD coverage
 `PRD-012`, `PRD-013`, `PRD-014`, `PRD-020`
 
-### Scope
-To be expanded after campaign and approval data contracts/pages exist.
+### Why now
+PKG-003 surfaced campaign lifecycle and approval signals. Dedicated review queues are the next PRD-critical bottleneck-reduction workflow.
+
+### Expanded scope
+- Implement `/reviews/bari`, `/reviews/blue`, `/reviews/internal`, and `/reviews/all` route-specific views backed by seeded approval records.
+- Bari queue: non-technical copy review cards, tabs, inline editor/diff/notes scaffold, approve/request rewrite/reject/save-note actions as UI affordances only.
+- Blue queue: decision cards with reason needed, risk, AI recommendation, outcome if approved/rejected, related campaign/offer/audience, and decision action affordances.
+- Internal queue: operational checklist cards for final campaign check, Keap setup, segment, send window, approvals, and handoff readiness.
+- All approvals: unified queue grouped by owner/status/risk.
+
+### Out of scope
+- Persisted approval mutations.
+- Full rich-text editor implementation.
+- Agent-generated review updates beyond existing demo data.
+
+### Required checks
+- `npm run lint`
+- `npm run build`
+
+### Regression checks
+- Existing dashboard and campaign routes still compile.
+- Review routes avoid technical jargon for Bari/Blue by default.
 
 ---
 
