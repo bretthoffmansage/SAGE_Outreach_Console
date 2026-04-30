@@ -64,6 +64,8 @@ export type LibraryItem = {
   summary: string;
   tags: string[];
   riskLevel?: RiskLevel;
+  /** Optional structured demo metadata for richer Library inspector panels. */
+  payload?: Record<string, unknown>;
 };
 
 export type AgentDefinition = {
@@ -74,6 +76,84 @@ export type AgentDefinition = {
   inputs: string[];
   outputs: string[];
   status: "ready" | "needs_config" | "demo";
+};
+
+export type AgentProvider = "openai" | "anthropic" | "manual" | "demo";
+export type AgentRuntimeStatus = "idle" | "ready" | "running" | "human_pause" | "pending" | "blocked" | "complete" | "error";
+
+export type AgentConfigRecord = {
+  agentId: string;
+  displayName: string;
+  shortDescription: string;
+  workflowOrder: number;
+  category: string;
+  enabled: boolean;
+  systemPrompt: string;
+  taskPromptTemplate: string;
+  styleGuidance?: string;
+  requiredContextSources: string[];
+  exampleReferences?: string[];
+  preferredProvider: AgentProvider;
+  preferredModel: string;
+  temperature: number;
+  maxTokens: number;
+  structuredOutputRequired: boolean;
+  inputSchemaJson: string;
+  outputSchemaJson: string;
+  requiredInputs: string[];
+  optionalInputs: string[];
+  requiredOutputs: string[];
+  escalationMarkers: string[];
+  confidenceField?: string;
+  riskField?: string;
+  activeRules: string[];
+  blockingRules: string[];
+  warningRules: string[];
+  allowedActions: string[];
+  disallowedActions: string[];
+  humanApprovalRequired: boolean;
+  canCreateApprovalItems: boolean;
+  canModifyCopy: boolean;
+  canReadLibraries: boolean;
+  canTriggerIntegrations: boolean;
+  nextAgentIds: string[];
+  fallbackAgentId?: string;
+  blockedRoute?: string;
+  humanPauseRoute?: string;
+  handoffConditions: string[];
+  retryPolicy?: string;
+  maxRetries: number;
+  configVersion: number;
+  lastEditedBy?: string;
+  lastEditedAt: number;
+  notes?: string;
+};
+
+export type AgentRuntimeStateRecord = {
+  agentId: string;
+  status: AgentRuntimeStatus;
+  isRunning: boolean;
+  currentTaskLabel?: string;
+  currentTaskDetail?: string;
+  lastStartedAt?: number;
+  lastFinishedAt?: number;
+  lastRunId?: string;
+  lastError?: string;
+  lastOutputSummary?: string;
+  updatedAt: number;
+};
+
+export type AgentRunRecord = {
+  runId: string;
+  campaignId?: string;
+  agentId: string;
+  status: AgentRuntimeStatus;
+  inputSnapshot?: string;
+  outputSummary?: string;
+  outputJson?: string;
+  startedAt: number;
+  finishedAt?: number;
+  error?: string;
 };
 
 export type AgentRunStep = {
@@ -136,6 +216,8 @@ export type LearningInsight = {
   title: string;
   summary: string;
   confidence: number;
+  /** Optional structured demo metadata for richer Learning inspector panels. */
+  payload?: Record<string, unknown>;
 };
 
 export type AuditEvent = {

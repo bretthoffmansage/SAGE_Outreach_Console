@@ -1,94 +1,887 @@
-import { AlertTriangle, BookOpen, Filter, Plus, Search, Sparkles } from "lucide-react";
-import { libraryItems, learningInsights } from "@/lib/data/demo-data";
-import { Card, Pill, Button } from "@/components/ui";
+"use client";
 
-const libraryConfig: Record<string, { title: string; type?: string | string[]; summary: string; tone: string }> = {
-  offers: { title: "Offers & Lead Magnets", type: ["offer", "lead_magnet"], summary: "Approved, proposed, active, paused, and performance-aware marketing offers. Agents must not invent new offers silently.", tone: "blue" },
-  email: { title: "Email Library", type: "email", summary: "Historical emails and Bari voice examples with source authority ratings like Gold, Silver, Bronze, Rejected, and Needs Review.", tone: "purple" },
-  "voice-rules": { title: "Bari Voice Rules", type: "voice_rule", summary: "Editable founder-voice rules, including blocking terminology guidance and do-not-use patterns.", tone: "amber" },
-  signoffs: { title: "Sign-off Library", type: "signoff", summary: "Approved sign-off families and context rules agents may select from safely.", tone: "green" },
-  audiences: { title: "Audience Library", type: "audience", summary: "Audience definitions, Keap mappings, exclusions, allowed offers, and performance notes.", tone: "blue" },
-  compliance: { title: "Compliance Rules", type: "compliance_rule", summary: "Risky or banned claims, safer wording guidance, severity, and Blue-review requirements.", tone: "red" },
-  learning: { title: "Learning Library", type: "learning", summary: "Reviewable insights from Bari edits, Blue decisions, replies, performance, and agent evaluations.", tone: "purple" },
+import { useMemo, useState } from "react";
+import { AlertTriangle, BookOpen, Filter, Search, Sparkles } from "lucide-react";
+import type { LearningInsight, LibraryItem } from "@/lib/domain";
+import { libraryItems, learningInsights } from "@/lib/data/demo-data";
+import { Button, ConsoleTable, ControlPanel, InlineAction, SectionHeader, StatusBadge, StatusDot, Td, Th, TableHead } from "@/components/ui";
+import { cn } from "@/lib/utils";
+
+type LibraryKey = "offers" | "email" | "voice-rules" | "signoffs" | "audiences" | "compliance" | "learning";
+
+type InventoryRecord = {
+  id: string;
+  title: string;
+  status: string;
+  summary: string;
+  cells: string[];
+  source: LibraryItem | LearningInsight;
+  kind: "library" | "learning";
 };
 
-function statusTone(status: string) {
+const libraryPageConfig: Record<LibraryKey, { title: string; summary: string; tone: string; filters: string[]; columns: string[] }> = {
+  offers: {
+    title: "Offers & Lead Magnets",
+    summary: "Operational inventory of active offers, approvals, channels, and deployment suitability.",
+    tone: "blue",
+    filters: ["Active", "Approved", "Needs Blue Approval", "Possible Idea", "Paused", "Retired", "All"],
+    columns: ["Name", "Type", "Status", "Approval owner", "Allowed channels", "Allowed audiences", "Last used", "Performance", "Action"],
+  },
+  email: {
+    title: "Email Library",
+    summary: "Source library for Bari-written, Bari-approved, imported, and agency-written examples.",
+    tone: "purple",
+    filters: ["Gold", "Silver", "Bronze", "Rejected", "Needs Review", "All"],
+    columns: ["Title / Subject", "Rating", "Source Type", "Associated Campaign", "Last Used", "Open"],
+  },
+  "voice-rules": {
+    title: "Bari Voice Rules",
+    summary: "Rule control list with blocking, warning, and guidance rules that shape founder voice output.",
+    tone: "amber",
+    filters: ["Blocking", "Warning", "Guidance", "All"],
+    columns: ["Rule", "Severity", "Status", "Summary"],
+  },
+  signoffs: {
+    title: "Sign-off Library",
+    summary: "Approved sign-off inventory with usage rules and automation permissions.",
+    tone: "green",
+    filters: ["Active", "Inactive", "Requires Bari Review", "Auto-selectable", "All"],
+    columns: ["Sign-off Text", "Allowed Contexts", "Status", "Agent Auto Choose", "Requires Bari Review", "Example Usage"],
+  },
+  audiences: {
+    title: "Audience Library",
+    summary: "Audience, tag, and performance inventory tied to offers and exclusions.",
+    tone: "blue",
+    filters: ["Active", "Demo", "Manual", "Needs Review", "All"],
+    columns: ["Audience", "Source", "Status", "Estimated Size", "Allowed Offers", "Exclusions", "Last Used", "Performance"],
+  },
+  compliance: {
+    title: "Compliance Rules",
+    summary: "Blocking, warning, and guidance rules for claims, channels, and approval ownership.",
+    tone: "red",
+    filters: ["Blocking", "Warning", "Guidance", "Inactive", "All"],
+    columns: ["Rule", "Severity", "Claim Type", "Status", "Channels", "Owner", "Examples"],
+  },
+  learning: {
+    title: "Learning Library",
+    summary: "Candidate and approved learning signals from edits, replies, performance, and evaluations.",
+    tone: "purple",
+    filters: ["Candidate", "Approved", "Rejected", "Archived", "All"],
+    columns: ["Insight", "Source", "Confidence", "Status", "Applies To", "Last Used"],
+  },
+};
+
+function formatLabel(value: string) {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function toneForStatus(status: string) {
   if (["active", "approved", "gold"].includes(status)) return "green";
-  if (["needs_blue_approval", "candidate", "blocking"].includes(status)) return status === "blocking" ? "red" : "amber";
+  if (["needs_blue_approval", "candidate", "warning", "needs_review", "paused", "possible_idea"].includes(status)) return "amber";
+  if (["blocking", "rejected"].includes(status)) return "red";
+  if (["silver", "bronze"].includes(status)) return "blue";
+  if (["retired", "archived", "inactive"].includes(status)) return "gray";
   return "gray";
 }
 
-export function LibraryRouteSection({ slug }: { slug?: string[] }) {
-  const key = slug?.[1] ?? "offers";
-  const config = libraryConfig[key] ?? libraryConfig.offers;
-  const records = libraryItems.filter((item) => Array.isArray(config.type) ? config.type.includes(item.type) : item.type === config.type);
-  const sageRule = libraryItems.find((item) => item.id === "rule_sage_caps");
+function toneForSeverityCell(cell: string) {
+  const normalized = cell.toLowerCase();
+  if (normalized === "blocking") return "red";
+  if (normalized === "warning") return "amber";
+  if (normalized === "guidance") return "blue";
+  return "gray";
+}
 
+function toneForRatingCell(cell: string) {
+  const normalized = cell.toLowerCase();
+  if (normalized === "gold") return "green";
+  if (normalized === "silver") return "blue";
+  if (normalized === "bronze") return "blue";
+  if (normalized === "rejected") return "red";
+  if (normalized.includes("review")) return "amber";
+  return "gray";
+}
+
+function sourceRatingKey(value: string) {
+  const normalized = value.toLowerCase().replace(/\s+/g, "_");
+  if (normalized === "needs_review") return "needs_review";
+  if (["gold", "silver", "bronze", "rejected"].includes(normalized)) return normalized;
+  return "unknown";
+}
+
+function sourceRatingStyles(value: string) {
+  const rating = sourceRatingKey(value);
+  if (rating === "gold") {
+    return { dot: "bg-[#FACC15]", badge: "border-[rgba(250,204,21,0.35)] bg-[rgba(250,204,21,0.10)] text-[#FDE68A]" };
+  }
+  if (rating === "silver") {
+    return { dot: "bg-[#CBD5E1]", badge: "border-[rgba(203,213,225,0.35)] bg-[rgba(203,213,225,0.10)] text-[#E2E8F0]" };
+  }
+  if (rating === "bronze") {
+    return { dot: "bg-[#C08457]", badge: "border-[rgba(192,132,87,0.40)] bg-[rgba(192,132,87,0.11)] text-[#FDBA74]" };
+  }
+  if (rating === "needs_review") {
+    return { dot: "bg-[#F59E0B]", badge: "border-[rgba(245,158,11,0.40)] bg-[rgba(245,158,11,0.10)] text-[#FCD34D]" };
+  }
+  if (rating === "rejected") {
+    return { dot: "bg-[#FB7185]", badge: "border-[rgba(251,113,133,0.40)] bg-[rgba(251,113,133,0.10)] text-[#FDA4AF]" };
+  }
+  return { dot: "bg-slate-500", badge: "border-slate-700 bg-slate-900/90 text-slate-200" };
+}
+
+function SourceRatingBadge({ value }: { value: string }) {
+  const styles = sourceRatingStyles(value);
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-        <div>
-          <Pill tone={config.tone}>{config.title}</Pill>
-          <h2 className="mt-3 text-3xl font-bold text-[#172033]">{config.title}</h2>
-          <p className="mt-2 max-w-3xl text-[#6f7685]">{config.summary}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button><Plus className="mr-2 h-4 w-4" /> Add record</Button>
-          <Button variant="secondary"><Filter className="mr-2 h-4 w-4" /> Filter</Button>
-          <Button variant="secondary"><Search className="mr-2 h-4 w-4" /> Search</Button>
-        </div>
-      </div>
+    <span className={cn("inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs font-semibold", styles.badge)}>
+      <span className={cn("h-2.5 w-2.5 rounded-full", styles.dot)} />
+      {formatLabel(value)}
+    </span>
+  );
+}
 
-      {key === "voice-rules" && sageRule && (
-        <Card className="border-red-200 bg-red-50">
-          <div className="flex gap-3 text-red-900">
-            <AlertTriangle className="mt-1 h-5 w-5" />
-            <div>
-              <h3 className="font-bold">Default blocking terminology rule</h3>
-              <p className="mt-1 text-sm leading-6">{sageRule.name}: {sageRule.summary}</p>
-            </div>
-          </div>
-        </Card>
-      )}
+function readPayloadString(item: LibraryItem, key: string, fallback: string) {
+  const value = item.payload?.[key];
+  return typeof value === "string" ? value : fallback;
+}
 
-      {key === "learning" && (
-        <Card className="bg-[#172033] text-white">
-          <div className="flex gap-3">
-            <Sparkles className="h-5 w-5 text-[#f1d9ad]" />
-            <div>
-              <h3 className="font-bold">Learning candidates require review</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-300">Insights from Bari edits, Blue decisions, campaign performance, HelpDesk replies, and agents stay as candidates until approved.</p>
-            </div>
-          </div>
-        </Card>
-      )}
+function readPayloadBoolean(item: LibraryItem, key: string, fallback: boolean) {
+  const value = item.payload?.[key];
+  return typeof value === "boolean" ? value : fallback;
+}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {records.map((item) => (
-          <Card key={item.id}>
-            <div className="flex items-start justify-between gap-3">
-              <Pill tone={statusTone(item.status)}>{item.status.replace(/_/g, " ")}</Pill>
-              <BookOpen className="h-5 w-5 text-[#647094]" />
+function readPayloadStringArray(item: LibraryItem, key: string, fallback: string[]) {
+  const value = item.payload?.[key];
+  if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) return value as string[];
+  return fallback;
+}
+
+function learningPayload(insight: LearningInsight) {
+  return insight.payload ?? {};
+}
+
+function readLearningString(insight: LearningInsight, key: string, fallback: string) {
+  const value = learningPayload(insight)[key];
+  return typeof value === "string" ? value : fallback;
+}
+
+function readLearningBoolean(insight: LearningInsight, key: string, fallback: boolean) {
+  const value = learningPayload(insight)[key];
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function rowsFor(key: LibraryKey): InventoryRecord[] {
+  if (key === "learning") {
+    return learningInsights.map((insight) => ({
+      id: insight.id,
+      title: insight.title,
+      status: insight.status,
+      summary: insight.summary,
+      source: insight,
+      kind: "learning",
+      cells: [
+        insight.title,
+        formatLabel(insight.source),
+        `${Math.round(insight.confidence * 100)}%`,
+        formatLabel(insight.status),
+        readLearningString(insight, "appliesTo", "founder nurture, reply handling"),
+        readLearningString(insight, "lastUsed", "Apr 30"),
+      ],
+    }));
+  }
+
+  const pick = (predicate: (item: LibraryItem) => boolean) => libraryItems.filter(predicate);
+
+  if (key === "offers") {
+    return pick((item) => item.type === "offer" || item.type === "lead_magnet").map((item) => ({
+      id: item.id,
+      title: item.name,
+      status: item.status,
+      summary: item.summary,
+      source: item,
+      kind: "library",
+      cells: [
+        item.name,
+        item.type.replace(/_/g, " "),
+        formatLabel(item.status),
+        readPayloadString(item, "approvalOwner", item.status === "needs_blue_approval" ? "Blue" : "Operator"),
+        readPayloadString(item, "allowedChannels", "email, landing page"),
+        readPayloadString(item, "allowedAudiences", "General marketing"),
+        readPayloadString(item, "lastUsed", "Apr 30"),
+        readPayloadString(item, "performanceSignal", "stable"),
+      ],
+    }));
+  }
+
+  if (key === "email") {
+    return pick((item) => item.type === "email").map((item) => ({
+      id: item.id,
+      title: item.name,
+      status: item.status,
+      summary: item.summary,
+      source: item,
+      kind: "library",
+      cells: [
+        readPayloadString(item, "subjectTitle", item.name),
+        formatLabel(item.status),
+        readPayloadString(item, "sourceType", "unknown"),
+        readPayloadString(item, "associatedCampaign", "Unassigned"),
+        readPayloadString(item, "lastUsed", "Apr 28"),
+      ],
+    }));
+  }
+
+  if (key === "voice-rules") {
+    return pick((item) => item.type === "voice_rule").map((item) => ({
+      id: item.id,
+      title: item.name,
+      status: item.status,
+      summary: item.summary,
+      source: item,
+      kind: "library",
+      cells: [
+        item.name,
+        readPayloadString(item, "severityLabel", item.status === "blocking" ? "Blocking" : formatLabel(item.status)),
+        readPayloadString(item, "lifecycleStatus", "Active"),
+        item.summary,
+      ],
+    }));
+  }
+
+  if (key === "signoffs") {
+    return pick((item) => item.type === "signoff").map((item) => ({
+      id: item.id,
+      title: item.name,
+      status: item.status,
+      summary: item.summary,
+      source: item,
+      kind: "library",
+      cells: [
+        item.name,
+        readPayloadString(item, "allowedContexts", "founder nurture, reactivation"),
+        formatLabel(item.status),
+        readPayloadBoolean(item, "agentAutoChoose", true) ? "Yes" : "No",
+        readPayloadBoolean(item, "requiresBariReview", true) ? "Yes" : "No",
+        readPayloadString(item, "exampleUsage", item.summary),
+      ],
+    }));
+  }
+
+  if (key === "audiences") {
+    return pick((item) => item.type === "audience").map((item) => ({
+      id: item.id,
+      title: item.name,
+      status: item.status,
+      summary: item.summary,
+      source: item,
+      kind: "library",
+      cells: [
+        item.name,
+        readPayloadString(item, "sourceLabel", "Keap tag"),
+        formatLabel(item.status),
+        readPayloadString(item, "estimatedSize", "—"),
+        readPayloadString(item, "allowedOffers", "—"),
+        readPayloadString(item, "exclusions", "—"),
+        readPayloadString(item, "lastUsed", "Apr 30"),
+        readPayloadString(item, "performanceNotes", "—"),
+      ],
+    }));
+  }
+
+  return pick((item) => item.type === "compliance_rule").map((item) => ({
+    id: item.id,
+    title: item.name,
+    status: item.status,
+    summary: item.summary,
+    source: item,
+    kind: "library",
+    cells: [
+      item.name,
+      readPayloadString(item, "severityLabel", item.status === "blocking" ? "Blocking" : formatLabel(item.status)),
+      readPayloadString(item, "claimType", "Claims"),
+      readPayloadString(item, "lifecycleStatus", "Active"),
+      readPayloadString(item, "channels", "email, landing page"),
+      readPayloadString(item, "owner", "Blue / Compliance"),
+      item.summary,
+    ],
+  }));
+}
+
+function rowMatchesFilter(key: LibraryKey, record: InventoryRecord, activeFilter: string) {
+  if (activeFilter === "All") return true;
+  const normalized = activeFilter.toLowerCase();
+
+  if (key === "offers") {
+    if (normalized === "needs blue approval") return record.status === "needs_blue_approval";
+    if (normalized === "approved") return record.status === "active";
+    return formatLabel(record.status).toLowerCase() === normalized;
+  }
+
+  if (key === "email") return formatLabel(record.status).toLowerCase() === normalized;
+
+  if (key === "voice-rules") {
+    const severity = record.cells[1].toLowerCase();
+    if (normalized === "blocking") return severity === "blocking";
+    if (normalized === "warning") return severity === "warning";
+    if (normalized === "guidance") return severity === "guidance";
+    return true;
+  }
+
+  if (key === "signoffs") {
+    if (normalized === "active") return record.status === "active";
+    if (normalized === "inactive") return record.status === "inactive";
+    if (normalized === "requires bari review") return record.cells[4].toLowerCase() === "yes";
+    if (normalized === "auto-selectable") return record.cells[3].toLowerCase() === "yes";
+    return true;
+  }
+
+  if (key === "audiences") {
+    if (normalized === "active") return record.status === "active";
+    if (normalized === "demo") return record.status === "demo";
+    if (normalized === "manual") return record.status === "manual";
+    if (normalized === "needs review") return record.status === "needs_review";
+    return true;
+  }
+
+  if (key === "compliance") {
+    if (normalized === "inactive") return record.status === "inactive";
+    const severity = record.cells[1].toLowerCase();
+    if (normalized === "blocking") return severity === "blocking" && record.status !== "inactive";
+    if (normalized === "warning") return severity === "warning" && record.status !== "inactive";
+    if (normalized === "guidance") return severity === "guidance" && record.status !== "inactive";
+    return true;
+  }
+
+  return formatLabel(record.status).toLowerCase() === normalized;
+}
+
+function filterCountFor(key: LibraryKey, filter: string, rows: InventoryRecord[]) {
+  if (filter === "All") return rows.length;
+  return rows.filter((row) => rowMatchesFilter(key, row, filter)).length;
+}
+
+function statusStripFor(key: LibraryKey, rows: InventoryRecord[]) {
+  if (key === "email") {
+    return [
+      { label: "Gold", value: rows.filter((row) => row.status === "gold").length, tone: "green" },
+      { label: "Silver", value: rows.filter((row) => row.status === "silver").length, tone: "blue" },
+      { label: "Bronze", value: rows.filter((row) => row.status === "bronze").length, tone: "blue" },
+      { label: "Needs Review", value: rows.filter((row) => row.status === "needs_review").length, tone: "amber" },
+      { label: "Rejected", value: rows.filter((row) => row.status === "rejected").length, tone: "red" },
+    ];
+  }
+
+  if (key === "offers") {
+    return [
+      { label: "Active", value: rows.filter((row) => row.status === "active").length, tone: "green" },
+      { label: "Approved", value: rows.filter((row) => row.status === "active").length, tone: "green" },
+      { label: "Needs Blue", value: rows.filter((row) => row.status === "needs_blue_approval").length, tone: "amber" },
+      { label: "Possible Ideas", value: rows.filter((row) => row.status === "possible_idea").length, tone: "blue" },
+      { label: "Retired", value: rows.filter((row) => row.status === "retired").length, tone: "gray" },
+    ];
+  }
+
+  if (key === "voice-rules") {
+    return [
+      { label: "Blocking", value: rows.filter((row) => row.cells[1].toLowerCase() === "blocking").length, tone: "red" },
+      { label: "Warning", value: rows.filter((row) => row.cells[1].toLowerCase() === "warning").length, tone: "amber" },
+      { label: "Guidance", value: rows.filter((row) => row.cells[1].toLowerCase() === "guidance").length, tone: "blue" },
+      { label: "Inactive", value: rows.filter((row) => row.status === "inactive").length, tone: "gray" },
+    ];
+  }
+
+  if (key === "signoffs") {
+    return [
+      { label: "Records", value: rows.length, tone: "blue" },
+      { label: "Active", value: rows.filter((row) => row.status === "active").length, tone: "green" },
+      { label: "Auto-selectable", value: rows.filter((row) => row.cells[3].toLowerCase() === "yes").length, tone: "green" },
+      { label: "Needs Bari", value: rows.filter((row) => row.cells[4].toLowerCase() === "yes").length, tone: "amber" },
+      { label: "Blocked", value: rows.filter((row) => row.status === "blocked").length, tone: "red" },
+    ];
+  }
+
+  if (key === "audiences") {
+    return [
+      { label: "Records", value: rows.length, tone: "blue" },
+      { label: "Active", value: rows.filter((row) => row.status === "active").length, tone: "green" },
+      { label: "Demo", value: rows.filter((row) => row.status === "demo").length, tone: "blue" },
+      { label: "Manual", value: rows.filter((row) => row.status === "manual").length, tone: "blue" },
+      { label: "Needs Review", value: rows.filter((row) => row.status === "needs_review").length, tone: "amber" },
+    ];
+  }
+
+  if (key === "compliance") {
+    return [
+      { label: "Rules", value: rows.length, tone: "blue" },
+      { label: "Blocking", value: rows.filter((row) => row.cells[1].toLowerCase() === "blocking").length, tone: "red" },
+      { label: "Warning", value: rows.filter((row) => row.cells[1].toLowerCase() === "warning").length, tone: "amber" },
+      { label: "Guidance", value: rows.filter((row) => row.cells[1].toLowerCase() === "guidance").length, tone: "blue" },
+      { label: "Inactive", value: rows.filter((row) => row.status === "inactive").length, tone: "gray" },
+    ];
+  }
+
+  return [
+    { label: "Candidate", value: rows.filter((row) => row.status === "candidate").length, tone: "amber" },
+    { label: "Approved", value: rows.filter((row) => row.status === "approved").length, tone: "green" },
+    { label: "Rejected", value: rows.filter((row) => row.status === "rejected").length, tone: "red" },
+    { label: "Archived", value: rows.filter((row) => row.status === "archived").length, tone: "gray" },
+  ];
+}
+
+function InventoryStatusStrip({ items, libraryKey }: { items: Array<{ label: string; value: number; tone: string }>; libraryKey: LibraryKey }) {
+  return (
+    <ControlPanel className="p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {items.map((item) => (
+          libraryKey === "email" ? (
+            <div className={cn("inline-flex items-center gap-2 rounded-lg border px-3 py-1.5", sourceRatingStyles(item.label).badge)} key={item.label}>
+              <span className={cn("h-2.5 w-2.5 rounded-full", sourceRatingStyles(item.label).dot)} />
+              <span className="text-xs font-semibold">{item.label}</span>
+              <span className="text-xs font-bold">{item.value}</span>
             </div>
-            <h3 className="mt-4 text-lg font-bold text-[#172033]">{item.name}</h3>
-            <p className="mt-2 text-sm leading-6 text-[#6f7685]">{item.summary}</p>
-            <div className="mt-4 flex flex-wrap gap-2">{item.tags.map((tag) => <span className="rounded-full bg-[#f4ecdf] px-2.5 py-1 text-xs font-semibold text-[#8a7357]" key={tag}>{tag}</span>)}</div>
-          </Card>
+          ) : (
+            <div className="inline-flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/75 px-3 py-1.5" key={item.label}>
+              <StatusDot tone={item.tone} />
+              <span className="text-xs font-semibold text-slate-200">{item.label}</span>
+              <span className="text-xs font-bold text-slate-50">{item.value}</span>
+            </div>
+          )
         ))}
-      </section>
+      </div>
+    </ControlPanel>
+  );
+}
 
-      {key === "learning" && (
-        <section className="grid gap-4 md:grid-cols-2">
-          {learningInsights.map((insight) => (
-            <Card key={insight.id}>
-              <Pill tone={statusTone(insight.status)}>{insight.status}</Pill>
-              <h3 className="mt-4 text-lg font-bold text-[#172033]">{insight.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-[#6f7685]">{insight.summary}</p>
-              <p className="mt-4 text-sm font-semibold text-[#4f5f8f]">Confidence {Math.round(insight.confidence * 100)}%</p>
-            </Card>
-          ))}
-        </section>
-      )}
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-300">
+      <span className="font-semibold text-slate-200">{label}: </span>
+      {value}
     </div>
   );
+}
+
+function SelectedRecordPanel({ keyName, record }: { keyName: LibraryKey; record?: InventoryRecord }) {
+  if (!record) {
+    return (
+      <ControlPanel className="p-4">
+        <p className="text-sm font-semibold text-slate-100">Selected record</p>
+        <p className="mt-3 text-sm text-slate-300">No record selected. Choose a row to inspect inventory constraints and usage posture.</p>
+      </ControlPanel>
+    );
+  }
+
+  const heading = (
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Selected record</p>
+        <h3 className="mt-2 text-lg font-semibold text-slate-100">{record.title}</h3>
+      </div>
+      {keyName === "email" ? <SourceRatingBadge value={record.status} /> : <StatusBadge tone={toneForStatus(record.status)}>{formatLabel(record.status)}</StatusBadge>}
+    </div>
+  );
+
+  if (record.kind === "learning") {
+    const insight = record.source as LearningInsight;
+    const payload = learningPayload(insight);
+    return (
+      <ControlPanel className="p-4">
+        {heading}
+        <div className="mt-4 grid gap-2 text-sm">
+          <DetailRow label="Insight" value={insight.title} />
+          <DetailRow label="Source" value={formatLabel(insight.source)} />
+          <DetailRow label="Confidence" value={`${Math.round(insight.confidence * 100)}%`} />
+          <DetailRow label="Status" value={formatLabel(insight.status)} />
+          <DetailRow label="Applies to" value={readLearningString(insight, "appliesTo", "founder nurture, reply handling")} />
+          <DetailRow label="Can agents use" value={readLearningBoolean(insight, "canAgentsUse", false) ? "Yes" : "No"} />
+          <DetailRow label="Requires review" value={readLearningBoolean(insight, "requiresReview", true) ? "Yes" : "No"} />
+          <DetailRow label="Evidence / examples" value={readLearningString(insight, "evidence", insight.summary)} />
+          <DetailRow label="Last used" value={readLearningString(insight, "lastUsed", "Apr 30")} />
+          {typeof payload.notes === "string" ? <DetailRow label="Notes" value={payload.notes} /> : null}
+        </div>
+      </ControlPanel>
+    );
+  }
+
+  const item = record.source as LibraryItem;
+
+  if (keyName === "email") {
+    return (
+      <ControlPanel className="p-4">
+        {heading}
+        <div className="mt-4 grid gap-2 text-sm">
+          <DetailRow label="Title / subject" value={readPayloadString(item, "subjectTitle", item.name)} />
+          <DetailRow label="Source authority rating" value={formatLabel(item.status)} />
+          <DetailRow label="Source type" value={readPayloadString(item, "sourceType", "unknown")} />
+          <DetailRow label="Allowed for Bari voice retrieval" value={readPayloadBoolean(item, "allowedForBariVoice", true) ? "Yes" : "No"} />
+          <DetailRow label="Associated campaign" value={readPayloadString(item, "associatedCampaign", "Unassigned")} />
+          <DetailRow label="Excerpt" value={readPayloadString(item, "excerpt", item.summary)} />
+          <DetailRow label="Why this source matters" value={readPayloadString(item, "whyItMatters", item.summary)} />
+          <DetailRow label="Last touched" value={readPayloadString(item, "lastTouched", "Apr 30")} />
+          <DetailRow label="Last used" value={readPayloadString(item, "lastUsed", "Apr 28")} />
+        </div>
+      </ControlPanel>
+    );
+  }
+
+  if (keyName === "offers") {
+    return (
+      <ControlPanel className="p-4">
+        {heading}
+        <div className="mt-4 grid gap-2 text-sm">
+          <DetailRow label="Offer / lead magnet" value={item.name} />
+          <DetailRow label="Type" value={item.type.replace(/_/g, " ")} />
+          <DetailRow label="Status" value={formatLabel(item.status)} />
+          <DetailRow label="Approval owner" value={readPayloadString(item, "approvalOwner", item.status === "needs_blue_approval" ? "Blue" : "Operator")} />
+          <DetailRow label="Can agents use automatically" value={readPayloadBoolean(item, "canAgentsUseAutomatically", item.status === "active") ? "Yes" : "No"} />
+          <DetailRow label="Requires Blue approval" value={readPayloadBoolean(item, "requiresBlueApproval", item.status === "needs_blue_approval") ? "Yes" : "No"} />
+          <DetailRow label="Allowed channels" value={readPayloadString(item, "allowedChannels", "email")} />
+          <DetailRow label="Allowed audiences" value={readPayloadString(item, "allowedAudiences", "General")} />
+          <DetailRow label="Disallowed audiences / exclusions" value={readPayloadString(item, "disallowedAudiences", "Current clients")} />
+          <DetailRow label="Approved claims" value={readPayloadString(item, "approvedClaims", "Approved library claims only")} />
+          <DetailRow label="Banned claims" value={readPayloadString(item, "bannedClaims", "Guaranteed transformation")} />
+          <DetailRow label="Default CTA" value={readPayloadString(item, "defaultCta", "Book your next step")} />
+          <DetailRow label="Last used" value={readPayloadString(item, "lastUsed", "Apr 30")} />
+          <DetailRow label="Performance signal" value={readPayloadString(item, "performanceSignal", "stable")} />
+        </div>
+      </ControlPanel>
+    );
+  }
+
+  if (keyName === "voice-rules") {
+    const isSageRule = item.id === "rule_sage_caps";
+    return (
+      <ControlPanel className="p-4">
+        {heading}
+        <div className="mt-4 grid gap-2 text-sm">
+          <DetailRow label="Rule name" value={item.name} />
+          <DetailRow label="Severity" value={readPayloadString(item, "severityLabel", item.status === "blocking" ? "Blocking" : formatLabel(item.status))} />
+          <DetailRow label="Rule type / category" value={readPayloadString(item, "ruleCategory", "Terminology")} />
+          <DetailRow label="Applies to" value={readPayloadStringArray(item, "appliesToSurfaces", ["email", "ads", "landing pages", "replies"]).join(", ")} />
+          <DetailRow label="Enforcement" value={readPayloadString(item, "enforcement", "Blocks final approval")} />
+          <DetailRow label="Agent behavior" value={readPayloadString(item, "agentBehavior", "Brand Rules Checker flags; Bari Voice Agent follows")} />
+          <DetailRow label="Example violation" value={readPayloadString(item, "exampleViolation", isSageRule ? "Sage" : "Generic corporate phrasing")} />
+          <DetailRow label="Approved alternative" value={readPayloadString(item, "approvedAlternative", isSageRule ? "SAGE" : "Direct encouragement")} />
+          <DetailRow label="Last touched" value={readPayloadString(item, "lastTouched", "Apr 30")} />
+          <DetailRow label="Active status" value={readPayloadString(item, "lifecycleStatus", "Active")} />
+        </div>
+      </ControlPanel>
+    );
+  }
+
+  if (keyName === "signoffs") {
+    const variants = readPayloadStringArray(item, "approvedVariants", ["You can do this — Bari", "You can do this,\nBari"]);
+    return (
+      <ControlPanel className="p-4">
+        {heading}
+        <div className="mt-4 grid gap-2 text-sm">
+          <DetailRow label="Sign-off family / name" value={readPayloadString(item, "familyName", item.name)} />
+          <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-300">
+            <p className="font-semibold text-slate-200">Approved variants</p>
+            <ul className="mt-2 list-disc space-y-1 pl-4">
+              {variants.map((variant) => (
+                <li key={variant}>{variant}</li>
+              ))}
+            </ul>
+          </div>
+          <DetailRow label="Allowed contexts" value={readPayloadString(item, "allowedContexts", "founder nurture")} />
+          <DetailRow label="Avoid contexts" value={readPayloadString(item, "avoidContexts", "Hard sales closes")} />
+          <DetailRow label="Can agent choose automatically" value={readPayloadBoolean(item, "agentAutoChoose", true) ? "Yes" : "No"} />
+          <DetailRow label="Requires Bari review" value={readPayloadBoolean(item, "requiresBariReview", true) ? "Yes" : "No"} />
+          <DetailRow label="Example usage" value={readPayloadString(item, "exampleUsage", item.summary)} />
+          <DetailRow label="Notes" value={readPayloadString(item, "notes", "Keep variants short and human.")} />
+          <DetailRow label="Last touched" value={readPayloadString(item, "lastTouched", "Apr 30")} />
+        </div>
+      </ControlPanel>
+    );
+  }
+
+  if (keyName === "audiences") {
+    return (
+      <ControlPanel className="p-4">
+        {heading}
+        <div className="mt-4 grid gap-2 text-sm">
+          <DetailRow label="Audience name" value={item.name} />
+          <DetailRow label="Source type" value={readPayloadString(item, "sourceType", "Keap tag")} />
+          <DetailRow label="Keap tag mapping" value={readPayloadString(item, "keapTag", "TAG_REACTIVATION_DORMANT")} />
+          <DetailRow label="Estimated size" value={readPayloadString(item, "estimatedSize", "—")} />
+          <DetailRow label="Status" value={formatLabel(item.status)} />
+          <DetailRow label="Exclusions" value={readPayloadString(item, "exclusions", "—")} />
+          <DetailRow label="Allowed offers" value={readPayloadString(item, "allowedOffers", "—")} />
+          <DetailRow label="Disallowed offers" value={readPayloadString(item, "disallowedOffers", "—")} />
+          <DetailRow label="Recommended use" value={readPayloadString(item, "recommendedUse", item.summary)} />
+          <DetailRow label="Risk notes" value={readPayloadString(item, "riskNotes", "Validate mapping before send.")} />
+          <DetailRow label="Last used" value={readPayloadString(item, "lastUsed", "Apr 30")} />
+          <DetailRow label="Performance notes" value={readPayloadString(item, "performanceNotes", "warming")} />
+        </div>
+      </ControlPanel>
+    );
+  }
+
+  if (keyName === "compliance") {
+    const isNoGuarantee = item.id === "comp_no_guarantee";
+    return (
+      <ControlPanel className="p-4">
+        {heading}
+        <div className="mt-4 grid gap-2 text-sm">
+          <DetailRow label="Rule name" value={item.name} />
+          <DetailRow label="Severity" value={readPayloadString(item, "severityLabel", "Blocking")} />
+          <DetailRow label="Claim type" value={readPayloadString(item, "claimType", "Claims")} />
+          <DetailRow label="Applies to channels" value={readPayloadString(item, "channels", "email, landing page")} />
+          <DetailRow label="Owner" value={readPayloadString(item, "owner", "Blue / Compliance")} />
+          <DetailRow
+            label="Banned pattern / blocked claim"
+            value={readPayloadString(item, "bannedPattern", isNoGuarantee ? "Promises of guaranteed results or personal transformation" : "Unsupported guarantee language")}
+          />
+          <DetailRow label="Allowed alternative wording" value={readPayloadString(item, "allowedAlternative", "Outcome-focused, non-guaranteed language")} />
+          <DetailRow
+            label="Approval consequence"
+            value={readPayloadString(item, "approvalConsequence", isNoGuarantee ? "Blocks or escalates campaign for Blue review" : "Warning surfaced to Compliance Guard")}
+          />
+          <DetailRow label="Agent enforcement" value={readPayloadString(item, "agentEnforcement", "Compliance Guard flags; Approval Router escalates")} />
+          <DetailRow label="Examples" value={readPayloadString(item, "examples", item.summary)} />
+          <DetailRow label="Last touched" value={readPayloadString(item, "lastTouched", "Apr 30")} />
+        </div>
+      </ControlPanel>
+    );
+  }
+
+  return (
+    <ControlPanel className="p-4">
+      {heading}
+      <p className="mt-4 text-sm text-slate-300">{item.summary}</p>
+    </ControlPanel>
+  );
+}
+
+function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
+  const key = libraryKey;
+  const config = libraryPageConfig[key] ?? libraryPageConfig.offers;
+  const [activeFilter, setActiveFilter] = useState(config.filters[config.filters.length - 1] ?? "All");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [demoNotice, setDemoNotice] = useState<string | null>(null);
+
+  const allRows = useMemo(() => rowsFor(key), [key]);
+  const filteredRows = useMemo(() => allRows.filter((row) => rowMatchesFilter(key, row, activeFilter)), [activeFilter, allRows, key]);
+  const resolvedSelectedId = useMemo(() => {
+    if (!filteredRows.length) return null;
+    if (selectedId && filteredRows.some((row) => row.id === selectedId)) return selectedId;
+    return filteredRows[0].id;
+  }, [filteredRows, selectedId]);
+  const selectedRecord = filteredRows.find((row) => row.id === resolvedSelectedId);
+
+  const strip = statusStripFor(key, allRows);
+
+  return (
+    <div className="space-y-5">
+      <SectionHeader
+        eyebrow="Library inventory"
+        title={config.title}
+        description={config.summary}
+        actions={
+          <>
+            <button className="focus-ring" onClick={() => setDemoNotice("Demo: Add record flow is placeholder until Convex inventory writes are enabled.")} type="button">
+              <Button>
+                <BookOpen className="mr-2 h-4 w-4" />
+                Add record
+              </Button>
+            </button>
+            <button className="focus-ring" onClick={() => setDemoNotice("Demo: Advanced filter drawer not wired; use chips to scope inventory.")} type="button">
+              <Button variant="secondary">
+                <Filter className="mr-2 h-4 w-4" />
+                Filter
+              </Button>
+            </button>
+            <button className="focus-ring" onClick={() => setDemoNotice("Demo: Search scopes seeded records only in this build.")} type="button">
+              <Button variant="secondary">
+                <Search className="mr-2 h-4 w-4" />
+                Search
+              </Button>
+            </button>
+          </>
+        }
+      />
+
+      {demoNotice ? (
+        <ControlPanel className="border-sky-500/30 bg-sky-500/10 p-3 text-sm text-sky-100">{demoNotice}</ControlPanel>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
+        {config.filters.map((filter) => {
+          const isActive = filter === activeFilter;
+          const count = key === "email" ? filterCountFor(key, filter, allRows) : null;
+          return (
+            <button
+              className={cn(
+                "focus-ring inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-[0.16em] transition",
+                key === "email" && filter !== "All"
+                  ? cn(
+                      sourceRatingStyles(filter).badge,
+                      isActive ? "ring-1 ring-sky-400/40" : "opacity-90 hover:opacity-100",
+                    )
+                  : isActive
+                    ? "border-sky-400/60 bg-sky-500/15 text-sky-100"
+                    : "border-slate-700 bg-slate-950/70 text-slate-200 hover:border-slate-600",
+              )}
+              key={filter}
+              onClick={() => setActiveFilter(filter)}
+              type="button"
+            >
+              {key === "email" && filter !== "All" ? (
+                <span className={cn("h-2.5 w-2.5 rounded-full", sourceRatingStyles(filter).dot)} />
+              ) : (
+                <StatusDot tone={isActive ? "blue" : "gray"} />
+              )}
+              {filter}
+              {key === "email" ? (
+                <span
+                  className={cn(
+                    "rounded px-1.5 py-0.5 text-[0.62rem] font-bold leading-none",
+                    filter === "All"
+                      ? isActive
+                        ? "bg-sky-500/25 text-sky-100"
+                        : "bg-slate-800 text-slate-300"
+                      : sourceRatingStyles(filter).badge,
+                  )}
+                >
+                  {count}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+
+      {key === "email" ? null : <InventoryStatusStrip items={strip} libraryKey={key} />}
+
+      {key === "learning" ? (
+        <ControlPanel className="p-4">
+          <div className="flex items-start gap-3">
+            <Sparkles className="mt-0.5 h-4 w-4 text-violet-300" />
+            <p className="text-sm leading-6 text-slate-300">
+              Learning candidates from Bari edits, campaign performance, HelpDesk replies, and offer tests remain reviewable before they become authoritative guidance.
+            </p>
+          </div>
+        </ControlPanel>
+      ) : null}
+
+      {key === "voice-rules" ? (
+        <ControlPanel className="border-red-500/30 bg-red-500/8 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 text-red-300" />
+            <div>
+              <p className="text-sm font-semibold text-red-100">Blocking rule</p>
+              <p className="mt-1 text-sm leading-6 text-red-100">Always capitalize SAGE. Do not write Sage. SAGE capitalization errors block final approval.</p>
+            </div>
+          </div>
+        </ControlPanel>
+      ) : null}
+
+      <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+        <ConsoleTable>
+          <TableHead>
+            <tr>
+              {config.columns.map((column) => (
+                <Th key={column}>{column}</Th>
+              ))}
+            </tr>
+          </TableHead>
+          <tbody>
+            {filteredRows.map((row) => {
+              const isSelected = row.id === resolvedSelectedId;
+              return (
+                <tr className={cn("cursor-pointer", isSelected ? "bg-slate-900/85" : "")} key={row.id} onClick={() => setSelectedId(row.id)}>
+                  {row.cells.map((cell, index) => {
+                    const column = config.columns[index] ?? "";
+                    const isStatusColumn = column === "Status";
+                    const isSeverityColumn = column === "Severity";
+                    const isRatingColumn = column === "Rating";
+                    const isActionColumn = column === "Action" || column === "Open";
+                    if (isStatusColumn) {
+                      return (
+                        <Td key={`${row.id}-${config.columns[index]}`}>
+                          <StatusBadge tone={toneForStatus(row.status)}>{cell}</StatusBadge>
+                        </Td>
+                      );
+                    }
+                    if (isSeverityColumn) {
+                      return (
+                        <Td key={`${row.id}-${column}`}>
+                          <StatusBadge tone={toneForSeverityCell(cell)}>{cell}</StatusBadge>
+                        </Td>
+                      );
+                    }
+                    if (isRatingColumn) {
+                      return (
+                        <Td key={`${row.id}-${column}`}>
+                          {key === "email" ? <SourceRatingBadge value={cell} /> : <StatusBadge tone={toneForRatingCell(cell)}>{cell}</StatusBadge>}
+                        </Td>
+                      );
+                    }
+                    if (isActionColumn) {
+                      return (
+                        <Td key={`${row.id}-action`}>
+                          <button
+                            className="focus-ring rounded"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedId(row.id);
+                              setDemoNotice(`Demo: ${cell} action queued for ${row.title}.`);
+                            }}
+                            type="button"
+                          >
+                            <InlineAction>{cell}</InlineAction>
+                          </button>
+                        </Td>
+                      );
+                    }
+                    return <Td key={`${row.id}-${index}`}>{cell}</Td>;
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </ConsoleTable>
+
+        <div className="space-y-4">
+          <SelectedRecordPanel keyName={key} record={selectedRecord} />
+          {key === "learning" ? (
+            <ControlPanel className="p-4">
+              <p className="text-sm font-semibold text-slate-100">Learning actions</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  className="focus-ring rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-100 disabled:opacity-40"
+                  disabled={selectedRecord?.status !== "candidate"}
+                  onClick={() => setDemoNotice("Demo: Approve insight is disabled until review workflow is wired.")}
+                  type="button"
+                >
+                  Approve insight
+                </button>
+                <button
+                  className="focus-ring rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-100 disabled:opacity-40"
+                  disabled={selectedRecord?.status !== "candidate"}
+                  onClick={() => setDemoNotice("Demo: Reject insight is disabled until review workflow is wired.")}
+                  type="button"
+                >
+                  Reject insight
+                </button>
+                <button
+                  className="focus-ring rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 disabled:opacity-40"
+                  disabled={!selectedRecord}
+                  onClick={() => setDemoNotice("Demo: Archive is disabled until persistence is enabled.")}
+                  type="button"
+                >
+                  Archive
+                </button>
+              </div>
+            </ControlPanel>
+          ) : null}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function LibraryRouteSection({ slug }: { slug?: string[] }) {
+  const key = (slug?.[1] ?? "offers") as LibraryKey;
+  return <LibraryInventoryPage key={key} libraryKey={key} />;
 }

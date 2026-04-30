@@ -1,19 +1,97 @@
+"use client";
+
 import Link from "next/link";
-import { ArrowRight, Bot, CheckCircle2, ClipboardCheck, MailCheck, MessageCircle, Send, ShieldCheck, TrendingUp } from "lucide-react";
-import { approvals, auditEvents, campaigns, integrations, learningInsights, libraryItems, performanceSnapshots, responses, users } from "@/lib/data/demo-data";
+import { useMemo, useState } from "react";
+import { BrainCircuit, MailCheck, Play, Send, Sparkles } from "lucide-react";
+import { approvals, campaigns, integrations, libraryItems, performanceSnapshots, responses, users } from "@/lib/data/demo-data";
 import type { Campaign } from "@/lib/domain";
-import { Card, Pill, Button } from "@/components/ui";
+import {
+  Button,
+  Card,
+  ConsoleTable,
+  ControlPanel,
+  InlineAction,
+  PipelineStage,
+  Pill,
+  QueueLane,
+  ReadinessChecklist,
+  SectionHeader,
+  SignalList,
+  StatusBadge,
+  Td,
+  Th,
+  TableHead,
+} from "@/components/ui";
 
-const statusTone: Record<string, string> = {
-  needs_bari_review: "amber",
-  needs_blue_review: "red",
-  ready_for_keap: "green",
-  agent_drafting: "blue",
-  intake_draft: "gray",
-};
+const filters = ["All", "Needs Bari", "Needs Blue", "Ready for Keap", "Sent", "Learning", "Blocked"];
 
-function formatStatus(status: string) {
-  return status.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+const pipelineOrder = [
+  { label: "Intake", key: "intake_draft", tone: "gray", href: "/campaigns" },
+  { label: "Strategy", key: "agent_drafting", tone: "blue", href: "/campaigns" },
+  { label: "Copy", key: "agent_drafting", tone: "blue", href: "/campaigns" },
+  { label: "Bari Review", key: "needs_bari_review", tone: "amber", href: "/reviews/bari" },
+  { label: "Blue Review", key: "needs_blue_review", tone: "red", href: "/reviews/blue" },
+  { label: "Internal Approval", key: "needs_internal_review", tone: "green", href: "/reviews/internal" },
+  { label: "Keap Prep", key: "ready_for_keap", tone: "green", href: "/operations/keap" },
+  { label: "Sent", key: "sent", tone: "blue", href: "/intelligence/performance" },
+  { label: "Responses", key: "reporting", tone: "purple", href: "/intelligence/responses" },
+  { label: "Learning", key: "learning_complete", tone: "purple", href: "/libraries/learning" },
+];
+
+const responseSignals = [
+  { label: "Needs Reply", value: 1, tone: "amber", detail: "Manual reply drafts pending." },
+  { label: "Hot Leads", value: 1, tone: "green", detail: "Positive intent with follow-up questions." },
+  { label: "Questions", value: 1, tone: "blue", detail: "Need product or audience clarification." },
+  { label: "Objections", value: 0, tone: "red", detail: "No objections in seeded data." },
+  { label: "Complaints", value: 0, tone: "red", detail: "No complaint signals in current sync." },
+  { label: "Unsubscribes", value: 0, tone: "gray", detail: "No unsubscribe alerts." },
+  { label: "Testimonials", value: 0, tone: "purple", detail: "No testimonial captures yet." },
+  { label: "Unmatched", value: 0, tone: "gray", detail: "All demo responses are matched." },
+];
+
+const agentRack = [
+  { label: "Strategist", state: "ready", tone: "green", meta: "Campaign angle and objective." },
+  { label: "Audience Agent", state: "ready", tone: "green", meta: "Segment and exclusions." },
+  { label: "Offer Agent", state: "ready", tone: "green", meta: "Offer and claim selection." },
+  { label: "Copywriter", state: "running", tone: "blue", meta: "Drafting subject and body copy." },
+  { label: "Bari Voice Agent", state: "waiting", tone: "amber", meta: "Founder voice approval path." },
+  { label: "Brand Rules Checker", state: "ready", tone: "green", meta: "Terminology and capitalization." },
+  { label: "Compliance Guard", state: "blocked", tone: "red", meta: "High-risk claims need review." },
+  { label: "Skeptic", state: "ready", tone: "purple", meta: "Stress test positioning logic." },
+  { label: "Performance Agent", state: "idle", tone: "gray", meta: "Telemetry and signal review." },
+  { label: "Approval Router", state: "ready", tone: "green", meta: "Routes Bari, Blue, internal." },
+  { label: "Response Classifier", state: "ready", tone: "blue", meta: "Incoming reply sorting." },
+  { label: "Bari Learning Agent", state: "idle", tone: "amber", meta: "Captures edit patterns." },
+  { label: "Performance Reporter", state: "idle", tone: "purple", meta: "Outputs campaign telemetry." },
+  { label: "Learning Agent", state: "idle", tone: "purple", meta: "Approves reusable learnings." },
+];
+
+function formatLabel(value: string) {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function riskTone(risk: string) {
+  if (risk === "red") return "red";
+  if (risk === "yellow") return "amber";
+  return "green";
+}
+
+function stageForCampaign(campaign: Campaign) {
+  const stages: Record<string, string> = {
+    intake_draft: "Intake",
+    agent_drafting: "Copy",
+    needs_bari_review: "Bari Review",
+    needs_blue_review: "Blue Review",
+    needs_internal_review: "Internal Approval",
+    ready_for_keap: "Keap Prep",
+    sent: "Sent",
+    reporting: "Responses",
+    learning_complete: "Learning",
+    blocked: "Blocked",
+    approved: "Approved",
+    scheduled: "Scheduled",
+  };
+  return stages[campaign.status] ?? formatLabel(campaign.status);
 }
 
 function ownerName(campaign: Campaign) {
@@ -24,230 +102,481 @@ function offerName(campaign: Campaign) {
   return libraryItems.find((item) => item.id === campaign.offerId)?.name ?? "No offer selected";
 }
 
-function campaignApprovals(campaignId: string) {
-  return approvals.filter((approval) => approval.campaignId === campaignId);
+function pendingApprovals(campaign: Campaign) {
+  return campaign.pendingApprovals.length ? campaign.pendingApprovals.join(", ") : "none";
 }
 
-export function DashboardSection() {
-  const needsBari = approvals.filter((approval) => approval.owner === "bari" && approval.status === "pending");
-  const needsBlue = approvals.filter((approval) => approval.owner === "blue" && approval.status === "pending");
-  const readyForKeap = campaigns.filter((campaign) => campaign.status === "ready_for_keap");
-  const manualIntegrations = integrations.filter((integration) => integration.status === "manual_mode" || integration.status === "missing_credentials");
+function campaignMatchesFilter(campaign: Campaign, filter: string) {
+  if (filter === "All") return true;
+  if (filter === "Needs Bari") return campaign.pendingApprovals.includes("bari");
+  if (filter === "Needs Blue") return campaign.pendingApprovals.includes("blue");
+  if (filter === "Ready for Keap") return campaign.status === "ready_for_keap";
+  if (filter === "Sent") return campaign.status === "sent";
+  if (filter === "Learning") return campaign.status === "learning_complete";
+  if (filter === "Blocked") return campaign.status === "blocked";
+  return true;
+}
 
-  const cards = [
-    { title: "Needs Bari", value: needsBari.length, icon: MailCheck, tone: "amber", href: "/reviews/bari" },
-    { title: "Needs Blue", value: needsBlue.length, icon: ShieldCheck, tone: "red", href: "/reviews/blue" },
-    { title: "Ready to Send", value: readyForKeap.length, icon: Send, tone: "green", href: "/operations/keap" },
-    { title: "Replies Needing Attention", value: responses.length, icon: MessageCircle, tone: "blue", href: "/intelligence/responses" },
-    { title: "Learning Opportunities", value: learningInsights.filter((item) => item.status === "candidate").length, icon: TrendingUp, tone: "purple", href: "/libraries/learning" },
-    { title: "Integration Setup Items", value: manualIntegrations.length, icon: ClipboardCheck, tone: "gray", href: "/operations/integrations" },
-  ];
+function queueSummary(owner: "bari" | "blue" | "internal" | "all") {
+  const items = owner === "all" ? approvals : approvals.filter((approval) => approval.owner === owner);
+  const pending = items.filter((approval) => approval.status === "pending");
+  const topItem = pending[0];
+  const highestRisk = pending.some((approval) => approval.riskLevel === "red") ? "red" : pending.some((approval) => approval.riskLevel === "yellow") ? "amber" : "green";
+  return { pending, topItem, highestRisk };
+}
 
+function lastActivityForCampaign(campaign: Campaign) {
+  return new Date(campaign.updatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function PipelineMap() {
   return (
-    <div className="space-y-8">
-      <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
-        {cards.map((card) => {
-          const Icon = card.icon;
+    <ControlPanel className="p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Campaign Pipeline</p>
+          <p className="mt-1 text-sm text-slate-300">Intake to learning with live queue states.</p>
+        </div>
+        <StatusBadge tone="blue">{campaigns.length} active</StatusBadge>
+      </div>
+      <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
+        {pipelineOrder.map((stage) => {
+          const count = campaigns.filter((campaign) => campaign.status === stage.key).length;
+          const warning = stage.label === "Blue Review" && count ? "High-risk claims waiting" : stage.label === "Bari Review" && count ? "Founder voice pending" : count ? "Work in queue" : "No blocked items";
           return (
-            <Link key={card.title} href={card.href}>
-              <Card className="h-full transition hover:-translate-y-0.5 hover:bg-white">
-                <div className="flex items-center justify-between gap-3">
-                  <Pill tone={card.tone}>{card.title}</Pill>
-                  <Icon className="h-5 w-5 text-[#647094]" />
-                </div>
-                <p className="mt-4 text-4xl font-bold text-[#172033]">{card.value}</p>
-                <p className="mt-2 text-xs text-[#6f7685]">Open focused queue</p>
-              </Card>
+            <Link href={stage.href} key={stage.label}>
+              <PipelineStage title={stage.label} count={count} tone={stage.tone} warning={warning} />
             </Link>
           );
         })}
+      </div>
+    </ControlPanel>
+  );
+}
+
+export function DashboardSection() {
+  const reviewQueues: Array<{ title: string; href: string; owner: "bari" | "blue" | "internal" }> = [
+    { title: "Bari Copy Review", href: "/reviews/bari", owner: "bari" },
+    { title: "Blue Review", href: "/reviews/blue", owner: "blue" },
+    { title: "Internal Approvals", href: "/reviews/internal", owner: "internal" },
+  ];
+  const priorityCampaigns = campaigns.filter((campaign) =>
+    campaign.status === "blocked" ||
+    campaign.status === "needs_bari_review" ||
+    campaign.status === "needs_blue_review" ||
+    campaign.status === "needs_internal_review" ||
+    campaign.status === "ready_for_keap",
+  ).slice(0, 5);
+  const compactSignals = responseSignals.filter((signal) => signal.label === "Needs Reply" || signal.label === "Hot Leads" || signal.label === "Questions");
+  const agentActivity = agentRack.filter((agent) => ["running", "waiting", "blocked", "error"].includes(agent.state));
+  const integrationIssues = integrations.filter((integration) => integration.status === "manual_mode" || integration.status === "missing_credentials" || integration.status === "error");
+
+  return (
+    <div className="space-y-5">
+      <SectionHeader
+        eyebrow="CONTROL ROOM"
+        title="Campaign Control Console"
+        description="Monitor campaign stages, priority reviews, response signals, and system activity."
+      />
+
+      <PipelineMap />
+
+      <section className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
+        <ControlPanel className="p-4">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
+            <div>
+              <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Campaigns Needing Attention</p>
+              <p className="mt-1 text-sm text-slate-300">Priority campaign records that need human action now.</p>
+            </div>
+            <Link href="/campaigns"><Button variant="secondary">View All</Button></Link>
+          </div>
+          <div className="mt-4">
+            <ConsoleTable>
+              <TableHead>
+                <tr>
+                  <Th>Campaign</Th>
+                  <Th>Stage</Th>
+                  <Th>Risk</Th>
+                  <Th>Next action</Th>
+                  <Th>Owner</Th>
+                  <Th>Action</Th>
+                </tr>
+              </TableHead>
+              <tbody>
+                {priorityCampaigns.map((campaign) => (
+                  <tr key={campaign.id}>
+                    <Td>
+                      <div>
+                        <p className="font-semibold text-slate-100">{campaign.name}</p>
+                        <p className="mt-1 text-xs text-slate-400">{campaign.goal} · {campaign.audience}</p>
+                      </div>
+                    </Td>
+                    <Td>{stageForCampaign(campaign)}</Td>
+                    <Td><StatusBadge tone={riskTone(campaign.riskLevel)}>{campaign.riskLevel}</StatusBadge></Td>
+                    <Td className="max-w-[16rem] text-slate-300">{campaign.nextAction}</Td>
+                    <Td>{ownerName(campaign)}</Td>
+                    <Td>
+                      <Link href={`/campaigns/${campaign.id}`}><InlineAction>Open</InlineAction></Link>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </ConsoleTable>
+          </div>
+        </ControlPanel>
+
+        <div className="grid gap-4">
+          <ControlPanel className="p-4">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div>
+                <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Priority Reviews</p>
+                <p className="mt-1 text-sm text-slate-300">Queues with immediate decision pressure.</p>
+              </div>
+              <Link href="/reviews/all" className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">View all approvals</Link>
+            </div>
+            <ConsoleTable className="mt-4">
+              <TableHead>
+                <tr>
+                  <Th>Queue</Th>
+                  <Th>Waiting</Th>
+                  <Th>Highest risk</Th>
+                  <Th>Next item</Th>
+                  <Th>Open</Th>
+                </tr>
+              </TableHead>
+              <tbody>
+                {reviewQueues.map((queue) => {
+                  const summary = queueSummary(queue.owner);
+                  return (
+                    <tr key={queue.title}>
+                      <Td>{queue.title}</Td>
+                      <Td>{summary.pending.length}</Td>
+                      <Td><StatusBadge tone={summary.highestRisk}>{summary.highestRisk}</StatusBadge></Td>
+                      <Td className="max-w-[14rem] text-slate-300">{summary.topItem?.title ?? "No waiting items"}</Td>
+                      <Td><Link href={queue.href}><InlineAction>Open</InlineAction></Link></Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </ConsoleTable>
+          </ControlPanel>
+        </div>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">
-        <Card>
-          <div className="flex items-center justify-between gap-4">
+      <section className="grid gap-4 xl:grid-cols-2">
+        <QueueLane
+          title="Response Signals"
+          count={responses.length}
+          tone="blue"
+          subtitle="Only urgent/non-zero signals are shown here."
+          action={<Link href="/intelligence/responses" className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">Open Response Intelligence</Link>}
+        >
+          <SignalList
+            items={[
+              ...compactSignals,
+              { label: "No auto-send", value: "Active", tone: "red", detail: "Replies remain manual draft-only." },
+            ]}
+          />
+        </QueueLane>
+
+        <ControlPanel className="p-4">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
             <div>
-              <h3 className="text-xl font-bold text-[#172033]">Campaigns needing action</h3>
-              <p className="mt-2 text-sm text-[#6f7685]">Seeded lifecycle records show status, risk, pending approvals, and next action.</p>
+              <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Agent Activity</p>
+              <p className="mt-1 text-sm text-slate-300">Only agents needing attention are shown.</p>
             </div>
-            <Link href="/campaigns"><Button variant="secondary">View all</Button></Link>
+            <div className="flex gap-3">
+              <Link href="/intelligence/langgraph" className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">View Agent Map</Link>
+              <Link href="/intelligence/agent-runs" className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">Agent Runs</Link>
+            </div>
           </div>
-          <div className="mt-5 grid gap-3">
-            {campaigns.map((campaign) => <CampaignRow key={campaign.id} campaign={campaign} compact />)}
-          </div>
-        </Card>
-        <Card>
-          <h3 className="text-xl font-bold text-[#172033]">Recent activity</h3>
-          <div className="mt-5 space-y-4">
-            {auditEvents.map((event) => (
-              <div className="rounded-2xl border border-[#eadfce] bg-white/70 p-4" key={event.id}>
-                <p className="text-sm font-semibold text-[#172033]">{event.actor} {event.action}</p>
-                <p className="mt-1 text-sm text-[#6f7685]">{event.target}</p>
-              </div>
-            ))}
-          </div>
-        </Card>
+          {agentActivity.length ? (
+            <div className="mt-4 grid gap-3">
+              {agentActivity.map((agent) => (
+                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3" key={agent.label}>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-100">{agent.label}</p>
+                    <StatusBadge tone={agent.tone}>{agent.state}</StatusBadge>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-300">{agent.meta}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-slate-300">No active agent runs.</p>
+          )}
+        </ControlPanel>
       </section>
+
+      <ControlPanel className="p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">System Status</p>
+            <p className="mt-1 text-sm text-slate-300">Demo mode active · Human approval gate active · {integrationIssues.length} integration item(s) need credentials/manual setup.</p>
+          </div>
+          <Link href="/operations/integrations" className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">
+            Open Integrations
+          </Link>
+        </div>
+      </ControlPanel>
     </div>
   );
 }
 
-function CampaignRow({ campaign, compact = false }: { campaign: Campaign; compact?: boolean }) {
-  return (
-    <Link href={`/campaigns/${campaign.id}`} className="block rounded-3xl border border-[#eadfce] bg-white/72 p-5 transition hover:bg-white hover:shadow-sm">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Pill tone={statusTone[campaign.status] ?? "gray"}>{formatStatus(campaign.status)}</Pill>
-            <Pill tone={campaign.riskLevel === "green" ? "green" : campaign.riskLevel === "yellow" ? "amber" : "red"}>{campaign.riskLevel} risk</Pill>
-          </div>
-          <h3 className="mt-3 text-lg font-bold text-[#172033]">{campaign.name}</h3>
-          <p className="mt-1 text-sm text-[#6f7685]">{campaign.goal} · {campaign.audience} · {offerName(campaign)}</p>
-        </div>
-        <div className="min-w-0 md:max-w-sm md:text-right">
-          {!compact && <p className="text-xs font-bold uppercase tracking-widest text-[#8a7357]">Owner: {ownerName(campaign)}</p>}
-          <p className="mt-1 text-sm font-semibold text-[#172033]">{campaign.nextAction}</p>
-          <p className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-[#4f5f8f]">Open campaign <ArrowRight className="h-4 w-4" /></p>
-        </div>
-      </div>
-    </Link>
-  );
-}
-
 export function CampaignListSection() {
+  const [activeFilter, setActiveFilter] = useState("All");
+  const [selectedId, setSelectedId] = useState<string | null>(campaigns[0]?.id ?? null);
+  const filteredCampaigns = useMemo(
+    () => campaigns.filter((campaign) => campaignMatchesFilter(campaign, activeFilter)),
+    [activeFilter],
+  );
+  const selectedCampaign = filteredCampaigns.find((campaign) => campaign.id === selectedId) ?? filteredCampaigns[0];
+  const summaryStrip = [
+    { label: "Active", value: campaigns.filter((campaign) => campaign.status !== "archived").length, tone: "blue" },
+    { label: "Needs Bari", value: campaigns.filter((campaign) => campaign.pendingApprovals.includes("bari")).length, tone: "amber" },
+    { label: "Needs Blue", value: campaigns.filter((campaign) => campaign.pendingApprovals.includes("blue")).length, tone: "red" },
+    { label: "Ready for Keap", value: campaigns.filter((campaign) => campaign.status === "ready_for_keap").length, tone: "green" },
+    { label: "Blocked", value: campaigns.filter((campaign) => campaign.status === "blocked").length, tone: "red" },
+  ];
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-        <div>
-          <Pill tone="blue">Campaign lifecycle</Pill>
-          <h2 className="mt-3 text-3xl font-bold text-[#172033]">Campaigns</h2>
-          <p className="mt-2 max-w-2xl text-[#6f7685]">Track every campaign from intake through agent drafting, human approval, Keap prep, response intelligence, performance, and learning.</p>
+    <div className="space-y-5">
+      <SectionHeader
+        eyebrow="Campaign records"
+        title="Campaigns"
+        description="Operational campaign list with stage, risk, owner, next action, and handoff readiness."
+        actions={<Link href="/campaigns/new"><Button><Play className="mr-2 h-4 w-4" /> Create Campaign</Button></Link>}
+      />
+
+      <ControlPanel className="p-4">
+        <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
+          {summaryStrip.map((item) => (
+            <span className="inline-flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-1.5 text-xs text-slate-200" key={item.label}>
+              <span className={`h-2 w-2 rounded-full ${item.tone === "green" ? "bg-emerald-400" : item.tone === "amber" ? "bg-amber-400" : item.tone === "red" ? "bg-rose-400" : "bg-sky-400"}`} />
+              <span className="font-semibold">{item.label}</span>
+              <span className="text-slate-50">{item.value}</span>
+            </span>
+          ))}
         </div>
-        <Link href="/campaigns/new"><Button>Create Campaign</Button></Link>
-      </div>
-      <div className="grid gap-4">
-        {campaigns.map((campaign) => <CampaignRow key={campaign.id} campaign={campaign} />)}
-      </div>
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
+          {filters.map((filter) => (
+            <button key={filter} onClick={() => setActiveFilter(filter)} type="button">
+              <Pill tone={filter === activeFilter ? "blue" : "gray"}>{filter}</Pill>
+            </button>
+          ))}
+        </div>
+        <section className="mt-4 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+          <ConsoleTable>
+            <TableHead>
+              <tr>
+                <Th>Campaign</Th>
+                <Th>Type</Th>
+                <Th>Audience</Th>
+                <Th>Offer</Th>
+                <Th>Stage</Th>
+                <Th>Risk</Th>
+                <Th>Owner</Th>
+                <Th>Next action</Th>
+                <Th>Open</Th>
+              </tr>
+            </TableHead>
+            <tbody>
+              {filteredCampaigns.map((campaign) => (
+                <tr className={selectedCampaign?.id === campaign.id ? "bg-slate-900/85" : ""} key={campaign.id} onClick={() => setSelectedId(campaign.id)}>
+                  <Td>
+                    <div>
+                      <p className="font-semibold text-slate-100">{campaign.name}</p>
+                      <p className="mt-1 text-xs text-slate-400">{formatLabel(campaign.status)}</p>
+                    </div>
+                  </Td>
+                  <Td>{campaign.goal}</Td>
+                  <Td>{campaign.audience}</Td>
+                  <Td>{offerName(campaign)}</Td>
+                  <Td>{stageForCampaign(campaign)}</Td>
+                  <Td><StatusBadge tone={riskTone(campaign.riskLevel)}>{campaign.riskLevel}</StatusBadge></Td>
+                  <Td>{ownerName(campaign)}</Td>
+                  <Td className="max-w-[18rem] text-slate-300">{campaign.nextAction}</Td>
+                  <Td>
+                    <button onClick={() => setSelectedId(campaign.id)} type="button">
+                      <InlineAction>Open</InlineAction>
+                    </button>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </ConsoleTable>
+          <ControlPanel className="p-4">
+            {selectedCampaign ? (
+              <div className="space-y-3 text-sm">
+                <p className="text-sm font-semibold text-slate-100">Selected campaign</p>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-300">Campaign name: <span className="text-slate-100">{selectedCampaign.name}</span></div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-300">Campaign type: <span className="text-slate-100">{selectedCampaign.goal}</span></div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-300">Current stage: <span className="text-slate-100">{stageForCampaign(selectedCampaign)}</span></div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-300">Risk: <span className="text-slate-100">{selectedCampaign.riskLevel}</span></div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-300">Owner: <span className="text-slate-100">{ownerName(selectedCampaign)}</span></div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-300">Audience: <span className="text-slate-100">{selectedCampaign.audience}</span></div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-300">Offer: <span className="text-slate-100">{offerName(selectedCampaign)}</span></div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-300">Approvals required: <span className="text-slate-100">{pendingApprovals(selectedCampaign)}</span></div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-300">Next action: <span className="text-slate-100">{selectedCampaign.nextAction}</span></div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-300">Last activity: <span className="text-slate-100">{lastActivityForCampaign(selectedCampaign)}</span></div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-300">Handoff state: <span className="text-slate-100">{selectedCampaign.status === "ready_for_keap" ? "Ready for Keap handoff" : "In progress"}</span></div>
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Link href={`/campaigns/${selectedCampaign.id}`}><Button variant="secondary">Open full campaign</Button></Link>
+                  {selectedCampaign.pendingApprovals.includes("bari") ? <Link href="/reviews/bari"><Button variant="secondary">Open Bari Review</Button></Link> : null}
+                  {selectedCampaign.pendingApprovals.includes("blue") ? <Link href="/reviews/blue"><Button variant="secondary">Open Blue Review</Button></Link> : null}
+                  {selectedCampaign.status === "ready_for_keap" ? <Link href="/reviews/internal"><Button variant="secondary">Open Internal Approval</Button></Link> : null}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-300">Select a campaign to inspect details.</p>
+            )}
+          </ControlPanel>
+        </section>
+      </ControlPanel>
     </div>
   );
 }
 
 export function CampaignIntakeSection() {
-  const sections = [
-    ["What are we trying to do?", ["Campaign name", "Campaign goal", "Campaign type"]],
-    ["Who is this for?", ["Audience/segment", "Known exclusions", "Keap tag mapping"]],
-    ["What are we offering?", ["Offer or lead magnet", "CTA", "Allowed claims"]],
-    ["What should the audience do next?", ["Desired send window", "Primary CTA", "Success metric"]],
-    ["What rules or approvals might apply?", ["Bari voice required", "Blue approval expected", "Known constraints"]],
-    ["Additional context", ["Notes/context", "Reference emails", "Existing campaigns"]],
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const checklist = [
+    { label: "Goal defined", complete: true, tone: "green" },
+    { label: "Audience selected", complete: true, tone: "green" },
+    { label: "Offer selected", complete: true, tone: "green" },
+    { label: "CTA selected", complete: false, detail: "Awaiting operator choice." },
+    { label: "Approval rules known", complete: true, tone: "amber", detail: "Bari and Blue rules inferred from seeded data." },
+    { label: "Bari voice required?", complete: true, tone: "amber", detail: "Triggered for founder-signed copy." },
+    { label: "Blue approval likely?", complete: true, tone: "red", detail: "Required for high-risk claim language." },
+    { label: "Keap mapping ready?", complete: false, detail: "Manual/demo" },
+  ];
+
+  const fields: Array<[string, string, Array<{ label: string; placeholder: string }>]> = [
+    ["Campaign intent", "Define what this campaign is trying to accomplish.", [
+      { label: "Campaign name", placeholder: "Example: Cold Lead Reactivation — May Week 2" },
+      { label: "Campaign goal", placeholder: "Example: Reactivate dormant warm leads" },
+      { label: "Campaign type", placeholder: "Example: Reactivation, nurture, event invite" },
+    ]],
+    ["Audience", "Choose who this campaign is for and who should be excluded.", [
+      { label: "Audience / segment", placeholder: "Example: Dormant warm leads" },
+      { label: "Allowed exclusions", placeholder: "Example: Current clients, recent unsubscribes" },
+      { label: "Source mapping", placeholder: "Example: Keap tag or manual audience" },
+    ]],
+    ["Offer / lead magnet", "Select what the audience is being offered and what claims are allowed.", [
+      { label: "Offer selection", placeholder: "Example: Free SAGE Strategy Call" },
+      { label: "Promise / CTA", placeholder: "Example: Book your call" },
+      { label: "Allowed claims", placeholder: "Example: Low-pressure strategy call" },
+    ]],
+    ["Execution", "Define timing, CTA, and success metric.", [
+      { label: "Send window", placeholder: "Example: Tue–Thu morning" },
+      { label: "Success metric", placeholder: "Example: bookings, replies, clicks" },
+      { label: "Primary CTA", placeholder: "Example: Book your call" },
+    ]],
   ];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <Pill tone="purple">Guided intake</Pill>
-        <h2 className="mt-3 text-3xl font-bold text-[#172033]">Create Campaign</h2>
-        <p className="mt-2 max-w-2xl text-[#6f7685]">A non-technical campaign request flow that collects the context agents need while keeping users focused on marketing intent.</p>
-      </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        {sections.map(([title, fields]) => (
-          <Card key={title as string}>
-            <h3 className="text-lg font-bold text-[#172033]">{title}</h3>
-            <div className="mt-4 grid gap-3">
-              {(fields as string[]).map((field) => (
-                <label key={field} className="grid gap-1 text-sm font-semibold text-[#26324a]">
-                  {field}
-                  <span className="rounded-2xl border border-[#eadfce] bg-white/75 px-4 py-3 text-sm font-normal text-[#7b8190]">Demo input placeholder</span>
-                </label>
-              ))}
-            </div>
-          </Card>
-        ))}
-      </div>
-      <Card className="flex flex-col justify-between gap-4 bg-[#172033] text-white md:flex-row md:items-center">
-        <div>
-          <h3 className="text-xl font-bold">Preview then run the campaign agent workflow</h3>
-          <p className="mt-2 text-sm text-slate-300">Later packages will persist this intake and start the simulated or live agent graph.</p>
+    <div className="space-y-5">
+      <SectionHeader
+        eyebrow="Campaign configuration"
+        title="Create Campaign"
+        description="Configure the campaign system state, route likely approvals, and generate the first agent draft."
+        actions={<button onClick={() => setFeedback("Agent draft run started in demo mode using the current intake values.")} type="button"><Button><Play className="mr-2 h-4 w-4" /> Run Agent Draft</Button></button>}
+      />
+      {feedback ? <ControlPanel className="border-sky-500/30 bg-sky-500/10 p-3 text-sm text-sky-100">{feedback}</ControlPanel> : null}
+      <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="grid gap-4">
+          {fields.map(([heading, helper, items]) => (
+            <ControlPanel key={heading as string} className="p-4">
+              <div className="mb-4 flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-sky-300" />
+                <p className="text-sm font-semibold text-slate-100">{heading as string}</p>
+              </div>
+              <p className="mb-4 text-sm text-slate-300">{helper}</p>
+              <div className="grid gap-3 md:grid-cols-2">
+                {(items as Array<{ label: string; placeholder: string }>).map((item) => (
+                  <label key={item.label} className="grid gap-2 text-sm text-slate-200">
+                    <span className="font-medium">{item.label}</span>
+                    <div className="rounded-lg border border-slate-700 bg-slate-950/90 p-3">
+                      <input
+                        className="w-full border-0 bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-500"
+                        placeholder={item.placeholder}
+                      />
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </ControlPanel>
+          ))}
         </div>
-        <Button>Run Campaign Agent Workflow</Button>
-      </Card>
+        <QueueLane
+          title="Campaign Build Readiness"
+          count={`${checklist.filter((item) => item.complete).length}/${checklist.length}`}
+          tone="blue"
+          subtitle="Operator checklist before draft creation and approval routing."
+          action={<button onClick={() => setFeedback("Intake saved in demo mode. You can now run an agent draft.")} type="button"><Button variant="secondary">Save Intake</Button></button>}
+        >
+          <ReadinessChecklist items={checklist} />
+        </QueueLane>
+      </section>
     </div>
   );
 }
 
 export function CampaignDetailSection({ campaignId }: { campaignId?: string }) {
   const campaign = campaigns.find((item) => item.id === campaignId) ?? campaigns[0];
-  const relatedApprovals = campaignApprovals(campaign.id);
+  const relatedApprovals = approvals.filter((approval) => approval.campaignId === campaign.id);
   const perf = performanceSnapshots.find((item) => item.campaignId === campaign.id);
   const reply = responses.find((item) => item.campaignId === campaign.id);
-  const tabs = ["Overview", "Brief", "Copy", "Approvals", "Agent Runs", "Keap Prep", "Responses", "Performance", "Learning"];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <Link href="/campaigns" className="text-sm font-semibold text-[#4f5f8f]">← Back to campaigns</Link>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Pill tone={statusTone[campaign.status] ?? "gray"}>{formatStatus(campaign.status)}</Pill>
-          <Pill tone={campaign.riskLevel === "green" ? "green" : campaign.riskLevel === "yellow" ? "amber" : "red"}>{campaign.riskLevel} risk</Pill>
-        </div>
-        <h2 className="mt-3 text-3xl font-bold text-[#172033]">{campaign.name}</h2>
-        <p className="mt-2 max-w-3xl text-[#6f7685]">{campaign.goal} campaign for {campaign.audience}. Next action: {campaign.nextAction}</p>
-      </div>
-
-      <div className="flex gap-2 overflow-x-auto pb-2">
-        {tabs.map((tab) => <span key={tab} className="shrink-0 rounded-full border border-[#eadfce] bg-white/75 px-4 py-2 text-sm font-semibold text-[#26324a]">{tab}</span>)}
-      </div>
-
-      <section className="grid gap-6 lg:grid-cols-[1fr_0.9fr]">
-        <Card>
-          <h3 className="text-xl font-bold text-[#172033]">Overview</h3>
-          <div className="mt-5 grid gap-3 md:grid-cols-2">
+    <div className="space-y-5">
+      <SectionHeader
+        eyebrow="Campaign record"
+        title={campaign.name}
+        description={`${campaign.goal} for ${campaign.audience}. Current stage: ${stageForCampaign(campaign)}.`}
+        actions={
+          <>
+            <StatusBadge tone={riskTone(campaign.riskLevel)}>{campaign.riskLevel} risk</StatusBadge>
+            <Link href="/campaigns"><Button variant="secondary">Back to Campaigns</Button></Link>
+          </>
+        }
+      />
+      <section className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
+        <ControlPanel className="p-4">
+          <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Overview</p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
             {[
               ["Goal", campaign.goal],
               ["Channels", campaign.channels.join(", ")],
               ["Audience", campaign.audience],
-              ["Offer / Lead magnet", offerName(campaign)],
+              ["Offer", offerName(campaign)],
               ["Owner", ownerName(campaign)],
-              ["Keap readiness", campaign.status === "ready_for_keap" ? "Ready for handoff" : "Not ready"],
+              ["Approvals", pendingApprovals(campaign)],
+              ["Next action", campaign.nextAction],
+              ["Last activity", lastActivityForCampaign(campaign)],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-2xl border border-[#eadfce] bg-white/70 p-4">
-                <p className="text-xs font-bold uppercase tracking-widest text-[#8a7357]">{label}</p>
-                <p className="mt-2 text-sm font-semibold text-[#172033]">{value}</p>
+              <div key={label as string} className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3">
+                <p className="text-[0.62rem] font-bold uppercase tracking-[0.18em] text-slate-400">{label as string}</p>
+                <p className="mt-2 text-sm text-slate-100">{value as string}</p>
               </div>
             ))}
           </div>
-        </Card>
-        <Card>
-          <h3 className="text-xl font-bold text-[#172033]">Approvals and signals</h3>
-          <div className="mt-5 space-y-3">
-            {relatedApprovals.length ? relatedApprovals.map((approval) => (
-              <div key={approval.id} className="rounded-2xl border border-[#eadfce] bg-white/70 p-4">
-                <Pill tone={approval.owner === "bari" ? "amber" : approval.owner === "blue" ? "red" : "green"}>{approval.owner}</Pill>
-                <p className="mt-2 text-sm font-bold text-[#172033]">{approval.title}</p>
-                <p className="mt-1 text-sm text-[#6f7685]">{approval.reason}</p>
-              </div>
-            )) : <p className="text-sm text-[#6f7685]">No pending approval items.</p>}
-            {reply && <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900"><MessageCircle className="mb-2 h-4 w-4" /> {reply.summary}</div>}
-            {perf && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"><TrendingUp className="mb-2 h-4 w-4" /> {perf.summary}</div>}
-          </div>
-        </Card>
+        </ControlPanel>
+        <div className="grid gap-4">
+          <QueueLane title="Approval Requirements" count={relatedApprovals.length} tone="amber" subtitle="Current human gates for this campaign.">
+            <SignalList items={relatedApprovals.map((approval) => ({ label: approval.title, value: approval.owner, tone: riskTone(approval.riskLevel), detail: approval.reason }))} />
+          </QueueLane>
+          <QueueLane title="Response / Performance" count={perf ? 2 : 1} tone="purple" subtitle="Live signals attached to this campaign.">
+            <div className="space-y-2">
+              {reply ? <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3 text-sm text-slate-300">{reply.summary}</div> : null}
+              {perf ? <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3 text-sm text-slate-300">{perf.summary}</div> : null}
+            </div>
+          </QueueLane>
+        </div>
       </section>
-
       <section className="grid gap-4 md:grid-cols-3">
-        {[
-          [Bot, "Agent Runs", "View strategy, copy, compliance, and router outputs for this campaign."],
-          [Send, "Keap Prep", "Confirm brief, approvals, offer, audience, compliance, and export readiness."],
-          [CheckCircle2, "Learning", "Review reusable insights from edits, replies, and performance."],
-        ].map(([Icon, title, body]) => {
-          const IconComponent = Icon as typeof Bot;
-          return (
-            <Card key={title as string}>
-              <IconComponent className="h-5 w-5 text-[#4f5f8f]" />
-              <h3 className="mt-3 text-lg font-bold text-[#172033]">{title as string}</h3>
-              <p className="mt-2 text-sm leading-6 text-[#6f7685]">{body as string}</p>
-            </Card>
-          );
-        })}
+        <Card><MailCheck className="h-5 w-5 text-amber-300" /><h3 className="mt-3 text-lg font-semibold text-slate-100">Review console</h3><p className="mt-2 text-sm text-slate-300">Open Bari, Blue, or Internal review lanes as approvals are triggered.</p></Card>
+        <Card><Send className="h-5 w-5 text-emerald-300" /><h3 className="mt-3 text-lg font-semibold text-slate-100">Keap prep</h3><p className="mt-2 text-sm text-slate-300">Export remains manual/demo until live integration keys are configured.</p></Card>
+        <Card><BrainCircuit className="h-5 w-5 text-violet-300" /><h3 className="mt-3 text-lg font-semibold text-slate-100">Learning loop</h3><p className="mt-2 text-sm text-slate-300">Edit patterns and performance outcomes feed the learning library after review.</p></Card>
       </section>
     </div>
   );

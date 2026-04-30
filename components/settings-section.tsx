@@ -1,20 +1,110 @@
 import { KeyRound, Lock, ShieldCheck, UserCog } from "lucide-react";
 import { agents, auditEvents, integrations, users } from "@/lib/data/demo-data";
-import { Card, Pill, Button } from "@/components/ui";
+import { Button, ConsoleTable, ControlPanel, SectionHeader, StatusBadge, Td, Th, TableHead } from "@/components/ui";
 
 export function SettingsSection() {
   return (
-    <div className="space-y-6">
-      <div><Pill tone="gray">Admin settings</Pill><h2 className="mt-3 text-3xl font-bold text-[#172033]">Settings</h2><p className="mt-2 max-w-3xl text-[#6f7685]">Admin-safe view of users, roles, agent configuration, prompts, integration setup, security reminders, and audit logs.</p></div>
-      <section className="grid gap-6 lg:grid-cols-2">
-        <Card><div className="flex items-center gap-2"><UserCog className="h-5 w-5 text-[#4f5f8f]" /><h3 className="text-xl font-bold text-[#172033]">Users and roles</h3></div><div className="mt-4 space-y-3">{users.map((user) => <div className="rounded-2xl border border-[#eadfce] bg-white/70 p-4" key={user.id}><p className="font-bold text-[#172033]">{user.name}</p><p className="text-sm text-[#6f7685]">{user.email}</p><div className="mt-2 flex flex-wrap gap-2">{user.roles.map((role) => <Pill key={role} tone="blue">{role}</Pill>)}</div></div>)}</div></Card>
-        <Card><div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-emerald-600" /><h3 className="text-xl font-bold text-[#172033]">Security posture</h3></div><div className="mt-4 space-y-3 text-sm text-[#6f7685]">{["Clerk auth and role enforcement are scaffolded for live setup.", "API keys and external tokens must remain server-side only.", "Integration settings are admin-only surfaces.", "Agents may not bypass human approvals for risky actions."].map((item) => <div className="flex gap-2 rounded-2xl border border-[#eadfce] bg-white/70 p-3" key={item}><Lock className="mt-0.5 h-4 w-4 text-[#4f5f8f]" /> {item}</div>)}</div></Card>
+    <div className="space-y-5">
+      <SectionHeader
+        eyebrow="Console settings"
+        title="Settings"
+        description="Branding, roles, approval routing defaults, demo data posture, agent defaults, and operator preferences."
+        actions={<Button variant="secondary">Save console defaults</Button>}
+      />
+
+      <section className="grid gap-4 xl:grid-cols-2">
+        <ControlPanel className="p-4">
+          <div className="flex items-center gap-2">
+            <UserCog className="h-4 w-4 text-sky-300" />
+            <p className="text-sm font-semibold text-slate-100">Users + roles</p>
+          </div>
+          <ConsoleTable className="mt-4">
+            <TableHead>
+              <tr>
+                <Th>User</Th>
+                <Th>Email</Th>
+                <Th>Roles</Th>
+              </tr>
+            </TableHead>
+            <tbody>
+              {users.map((user) => (
+                <tr key={user.id}>
+                  <Td>{user.name}</Td>
+                  <Td>{user.email}</Td>
+                  <Td>{user.roles.join(", ")}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </ConsoleTable>
+        </ControlPanel>
+
+        <ControlPanel className="p-4">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-emerald-300" />
+            <p className="text-sm font-semibold text-slate-100">Security + approval posture</p>
+          </div>
+          <div className="mt-4 grid gap-2">
+            {[
+              "Human approval remains authoritative for risky actions.",
+              "Approval routing defaults can require Bari, Blue, and internal review.",
+              "Demo data mode remains active until live services are configured.",
+              "Agents may not bypass final approval or compliance gates.",
+            ].map((item) => (
+              <div key={item} className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3 text-sm text-slate-300">
+                <div className="flex items-start gap-2">
+                  <Lock className="mt-0.5 h-4 w-4 text-slate-400" />
+                  <span>{item}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </ControlPanel>
       </section>
-      <section className="grid gap-6 lg:grid-cols-2">
-        <Card><h3 className="text-xl font-bold text-[#172033]">Agents and prompts</h3><div className="mt-4 grid gap-3">{agents.slice(0,5).map((agent) => <div className="rounded-2xl border border-[#eadfce] bg-white/70 p-4" key={agent.id}><Pill tone={agent.status === "needs_config" ? "amber" : "green"}>{agent.status.replace(/_/g, " ")}</Pill><p className="mt-2 font-bold text-[#172033]">{agent.name}</p><p className="text-sm text-[#6f7685]">{agent.model}</p></div>)}</div><div className="mt-4"><Button variant="secondary">View prompt config</Button></div></Card>
-        <Card><h3 className="text-xl font-bold text-[#172033]">Audit log</h3><div className="mt-4 space-y-3">{auditEvents.map((event) => <div className="rounded-2xl border border-[#eadfce] bg-white/70 p-4" key={event.id}><p className="font-bold text-[#172033]">{event.actor} {event.action}</p><p className="text-sm text-[#6f7685]">{event.target}</p></div>)}</div></Card>
+
+      <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+        <ControlPanel className="p-4">
+          <p className="text-sm font-semibold text-slate-100">Agent / model defaults</p>
+          <div className="mt-4 space-y-2">
+            {agents.map((agent) => (
+              <div key={agent.id} className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-slate-100">{agent.name}</span>
+                  <StatusBadge tone={agent.status === "needs_config" ? "amber" : "green"}>{agent.status.replace(/_/g, " ")}</StatusBadge>
+                </div>
+                <p className="mt-2 text-xs text-slate-400">{agent.model}</p>
+              </div>
+            ))}
+          </div>
+        </ControlPanel>
+
+        <ControlPanel className="p-4">
+          <div className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-violet-300" />
+            <p className="text-sm font-semibold text-slate-100">Environment + audit visibility</p>
+          </div>
+          <ConsoleTable className="mt-4">
+            <TableHead>
+              <tr>
+                <Th>Event</Th>
+                <Th>Target</Th>
+                <Th>State</Th>
+              </tr>
+            </TableHead>
+            <tbody>
+              {auditEvents.map((event) => (
+                <tr key={event.id}>
+                  <Td>{event.actor} {event.action}</Td>
+                  <Td>{event.target}</Td>
+                  <Td>recorded</Td>
+                </tr>
+              ))}
+            </tbody>
+          </ConsoleTable>
+          <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3 text-sm text-slate-300">
+            {integrations.length} integrations are documented here. This page never displays secret values and stays safe for demo review.
+          </div>
+        </ControlPanel>
       </section>
-      <Card><div className="flex gap-3"><KeyRound className="h-5 w-5 text-[#8a7357]" /><div><h3 className="font-bold text-[#172033]">Environment setup visibility</h3><p className="mt-2 text-sm leading-6 text-[#6f7685]">{integrations.length} integrations are documented with required env keys. This page never displays secret values and leaves live setup to deployment configuration.</p></div></div></Card>
     </div>
   );
 }

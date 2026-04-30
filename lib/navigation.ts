@@ -1,23 +1,17 @@
 import {
-  Activity,
   BarChart3,
-  BookOpen,
   Bot,
   BrainCircuit,
   ClipboardCheck,
   FileText,
-  Gauge,
   GitBranch,
   Inbox,
   LayoutDashboard,
-  Library,
   MailCheck,
   Megaphone,
   MessageCircle,
-  Network,
   PenLine,
   PlugZap,
-  Search,
   Send,
   Settings,
   ShieldCheck,
@@ -27,63 +21,111 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-export type NavItem = { title: string; href: string; icon: LucideIcon; description: string };
-export type NavGroup = { title: string; items: NavItem[] };
+export type NavChild = {
+  title: string;
+  href: string;
+  icon: LucideIcon;
+  description: string;
+  match?: "exact" | "prefix";
+  activePrefixes?: string[];
+  excludedPrefixes?: string[];
+};
 
-export const navGroups: NavGroup[] = [
+export type NavCategory = {
+  id: "control" | "review" | "library" | "intelligence" | "operations";
+  title: string;
+  icon: LucideIcon;
+  defaultHref: string;
+  children: NavChild[];
+};
+
+export const navGroups: NavCategory[] = [
   {
-    title: "Command Center",
-    items: [
-      { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard, description: "Today’s campaign command view." },
-      { title: "Campaigns", href: "/campaigns", icon: Megaphone, description: "Lifecycle, status, and next actions." },
-      { title: "Create Campaign", href: "/campaigns/new", icon: PenLine, description: "Guided campaign intake." },
+    id: "control",
+    title: "Control",
+    icon: LayoutDashboard,
+    defaultHref: "/dashboard",
+    children: [
+      { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard, description: "Today’s campaign command view.", match: "exact" },
+      { title: "Campaigns", href: "/campaigns", icon: Megaphone, description: "Lifecycle, status, and next actions.", match: "prefix", excludedPrefixes: ["/campaigns/new", "/campaigns/create"] },
+      { title: "Create Campaign", href: "/campaigns/new", icon: PenLine, description: "Guided campaign intake.", match: "prefix", activePrefixes: ["/campaigns/new", "/campaigns/create"] },
     ],
   },
   {
-    title: "Review Queues",
-    items: [
-      { title: "Bari Copy Review", href: "/reviews/bari", icon: MailCheck, description: "Founder voice review inbox." },
-      { title: "Blue Review", href: "/reviews/blue", icon: ShieldCheck, description: "Strategic decision console." },
-      { title: "Internal Approvals", href: "/reviews/internal", icon: ClipboardCheck, description: "Operational send readiness." },
-      { title: "All Approvals", href: "/reviews/all", icon: Inbox, description: "Unified approval queue." },
+    id: "review",
+    title: "Review",
+    icon: MailCheck,
+    defaultHref: "/reviews/all",
+    children: [
+      { title: "All Approvals", href: "/reviews/all", icon: Inbox, description: "Unified approval queue.", match: "prefix" },
+      { title: "Bari Copy Review", href: "/reviews/bari", icon: MailCheck, description: "Founder voice review inbox.", match: "prefix" },
+      { title: "Blue Review", href: "/reviews/blue", icon: ShieldCheck, description: "Strategic decision console.", match: "prefix" },
+      { title: "Internal Approvals", href: "/reviews/internal", icon: ClipboardCheck, description: "Operational send readiness.", match: "prefix" },
     ],
   },
   {
-    title: "Libraries",
-    items: [
-      { title: "Offers & Lead Magnets", href: "/libraries/offers", icon: Tags, description: "Approved offers and claims." },
-      { title: "Email Library", href: "/libraries/email", icon: FileText, description: "Historical voice examples." },
-      { title: "Bari Voice Rules", href: "/libraries/voice-rules", icon: Sparkles, description: "Founder-voice guidance." },
-      { title: "Sign-off Library", href: "/libraries/signoffs", icon: PenLine, description: "Approved sign-off patterns." },
-      { title: "Audience Library", href: "/libraries/audiences", icon: Users, description: "Segments and Keap mappings." },
-      { title: "Compliance Rules", href: "/libraries/compliance", icon: ShieldCheck, description: "Claims and blocking rules." },
-      { title: "Learning Library", href: "/libraries/learning", icon: BrainCircuit, description: "Reusable insights and candidates." },
+    id: "library",
+    title: "Library",
+    icon: FileText,
+    defaultHref: "/libraries/email",
+    children: [
+      { title: "Email Library", href: "/libraries/email", icon: FileText, description: "Historical voice examples.", match: "prefix" },
+      { title: "Offers & Lead Magnets", href: "/libraries/offers", icon: Tags, description: "Approved offers and claims.", match: "prefix" },
+      { title: "Bari Voice Rules", href: "/libraries/voice-rules", icon: Sparkles, description: "Founder-voice guidance.", match: "prefix" },
+      { title: "Sign-off Library", href: "/libraries/signoffs", icon: PenLine, description: "Approved sign-off patterns.", match: "prefix" },
+      { title: "Audience Library", href: "/libraries/audiences", icon: Users, description: "Segments and Keap mappings.", match: "prefix" },
+      { title: "Compliance Rules", href: "/libraries/compliance", icon: ShieldCheck, description: "Claims and blocking rules.", match: "prefix" },
+      { title: "Learning Library", href: "/libraries/learning", icon: BrainCircuit, description: "Reusable insights and candidates.", match: "prefix" },
     ],
   },
   {
+    id: "intelligence",
     title: "Intelligence",
-    items: [
-      { title: "Response Intelligence", href: "/intelligence/responses", icon: MessageCircle, description: "HelpDesk reply analysis." },
-      { title: "Performance", href: "/intelligence/performance", icon: BarChart3, description: "Campaign metrics and learnings." },
-      { title: "Agent Runs", href: "/intelligence/agent-runs", icon: Bot, description: "Inspect specialist outputs." },
-      { title: "LangGraph Map", href: "/intelligence/langgraph", icon: GitBranch, description: "Visual workflow graph." },
+    icon: GitBranch,
+    defaultHref: "/intelligence/langgraph",
+    children: [
+      { title: "LangGraph Map", href: "/intelligence/langgraph", icon: GitBranch, description: "Visual workflow graph.", match: "prefix" },
+      { title: "Agent Runs", href: "/intelligence/agent-runs", icon: Bot, description: "Inspect specialist outputs.", match: "prefix" },
+      { title: "Response Intelligence", href: "/intelligence/responses", icon: MessageCircle, description: "HelpDesk reply analysis.", match: "prefix" },
+      { title: "Performance", href: "/intelligence/performance", icon: BarChart3, description: "Campaign metrics and learnings.", match: "prefix" },
     ],
   },
   {
+    id: "operations",
     title: "Operations",
-    items: [
-      { title: "Keap Sync", href: "/operations/keap", icon: Send, description: "Handoff and sync readiness." },
-      { title: "Integrations", href: "/operations/integrations", icon: PlugZap, description: "Connection health and setup." },
-      { title: "Settings", href: "/settings", icon: Settings, description: "Users, roles, agents, prompts." },
+    icon: PlugZap,
+    defaultHref: "/operations/integrations",
+    children: [
+      { title: "Integrations", href: "/operations/integrations", icon: PlugZap, description: "Connection health and setup.", match: "prefix" },
+      { title: "Keap Sync", href: "/operations/keap", icon: Send, description: "Handoff and sync readiness.", match: "prefix" },
+      { title: "Settings", href: "/settings", icon: Settings, description: "Users, roles, agents, prompts.", match: "prefix", activePrefixes: ["/settings"] },
     ],
   },
 ];
 
-export const quickActions = [
-  { label: "Global search", icon: Search },
-  { label: "Integration health", icon: Activity },
-  { label: "System status", icon: Gauge },
-  { label: "Library coverage", icon: Library },
-  { label: "Source rules", icon: BookOpen },
-  { label: "Workflow map", icon: Network },
-];
+export function isChildActive(pathname: string, child: NavChild) {
+  const activePrefixes = child.activePrefixes?.length ? child.activePrefixes : [child.href];
+  const excludedPrefixes = child.excludedPrefixes ?? [];
+
+  if (excludedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
+    return false;
+  }
+
+  if (child.match === "exact") {
+    return activePrefixes.some((prefix) => pathname === prefix);
+  }
+
+  return activePrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+export function getActiveNavCategory(pathname: string) {
+  return navGroups.find((group) => group.children.some((child) => isChildActive(pathname, child))) ?? navGroups[0];
+}
+
+export function getActiveNavChild(pathname: string, category = getActiveNavCategory(pathname)) {
+  return category.children.find((child) => isChildActive(pathname, child)) ?? category.children[0];
+}
+
+export function findNavChildByHref(href: string) {
+  return navGroups.flatMap((group) => group.children).find((child) => child.href === href);
+}

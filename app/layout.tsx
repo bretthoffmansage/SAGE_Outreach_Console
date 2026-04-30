@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { appBranding } from "@/lib/branding";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI Campaign Desk",
+  title: appBranding.name,
   description: "Internal marketing command center for campaign planning, approvals, agents, integrations, and learning.",
 };
 
