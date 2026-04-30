@@ -783,11 +783,7 @@ export function LangGraphSection() {
 
   return (
     <div className="space-y-5">
-      <SectionHeader
-        eyebrow="Workflow map"
-        title="LangGraph Map"
-        description="Visual workflow from campaign intake through approvals, Keap prep, response classification, reporting, and learning."
-      />
+      <SectionHeader eyebrow="Active Agents" title="Active Agents" />
       <ControlPanel className="p-4">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {orderedConfigs.map((config, index) => {

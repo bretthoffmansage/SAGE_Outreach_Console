@@ -109,7 +109,7 @@ const agentSeeds: AgentSeed[] = [
   },
   {
     agentId: "audience_agent",
-    displayName: "Audience Agent",
+    displayName: "Audience",
     shortDescription: "Chooses or validates audience segment and exclusions.",
     workflowOrder: 3,
     category: "audience",
@@ -155,7 +155,7 @@ const agentSeeds: AgentSeed[] = [
   },
   {
     agentId: "offer_agent",
-    displayName: "Offer Agent",
+    displayName: "Offer",
     shortDescription: "Selects or validates the approved offer/lead magnet.",
     workflowOrder: 4,
     category: "offer",
@@ -201,7 +201,7 @@ const agentSeeds: AgentSeed[] = [
   },
   {
     agentId: "copywriter",
-    displayName: "Copywriter Agent",
+    displayName: "Copywriter",
     shortDescription: "Writes first-pass email/ad copy from brief, audience, offer, and rules.",
     workflowOrder: 5,
     category: "copy",
@@ -247,7 +247,7 @@ const agentSeeds: AgentSeed[] = [
   },
   {
     agentId: "bari_voice_agent",
-    displayName: "Bari Voice Agent",
+    displayName: "Bari Voice",
     shortDescription: "Rewrites or validates copy against Bari-approved voice examples and rules.",
     workflowOrder: 6,
     category: "voice",
@@ -431,7 +431,7 @@ const agentSeeds: AgentSeed[] = [
   },
   {
     agentId: "performance_agent",
-    displayName: "Performance Agent",
+    displayName: "Performance",
     shortDescription: "Predicts tests and likely performance signals before send.",
     workflowOrder: 10,
     category: "performance",
@@ -707,7 +707,7 @@ const agentSeeds: AgentSeed[] = [
   },
   {
     agentId: "learning_agent",
-    displayName: "Learning Agent",
+    displayName: "Learning",
     shortDescription: "Turns edits, replies, and campaign results into reusable learning.",
     workflowOrder: 16,
     category: "learning",
