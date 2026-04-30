@@ -9,6 +9,7 @@ const eslintConfig = [
       "shell/**",
       "dry_runs/**",
       "agent_runs/**",
+      "_forgeshell_archive/**",
       "node_modules/**",
       ".next/**",
     ],

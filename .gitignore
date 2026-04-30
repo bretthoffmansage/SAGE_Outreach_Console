@@ -1,3 +1,4 @@
+# Application .gitignore (post–ForgeShell handoff)
 .env.local
 .env.*.local
 
@@ -9,14 +10,7 @@ dist/
 build/
 coverage/
 *.tsbuildinfo
+.vite/
 
-agent_runs/*
-!agent_runs/.gitkeep
-
-dry_runs/logs/*
-!dry_runs/logs/.gitkeep
-
-dry_runs/results/*
-!dry_runs/results/.gitkeep
-
-.claude/settings.local.json
+# ForgeShell packaging archive (kept intentionally)
+_forgeshell_archive/
