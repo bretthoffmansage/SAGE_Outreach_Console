@@ -199,7 +199,7 @@ Completed on 2026-04-30. Added route-specific Bari, Blue, internal, and all-appr
 ---
 
 ## PKG-005 — Source-of-Truth Libraries
-Status: ready
+Status: complete
 
 ### Purpose
 Implement offers/lead magnets, email/voice examples, Bari voice rules, sign-offs, audiences, compliance rules, and learning library basics.
@@ -227,6 +227,13 @@ Campaign and approval surfaces now exist. Source-of-truth libraries must be visi
 
 ### Regression checks
 - Existing dashboard, campaign, and review routes still compile.
+
+### Completion notes
+Completed on 2026-04-30. Added route-specific source-of-truth library views for offers/lead magnets, email, Bari voice rules, sign-offs, audiences, compliance, and learning, with seeded record cards, filtering/search/add affordances, SAGE blocking rule highlight, and learning-candidate governance messaging.
+
+### Validation evidence
+- `npm run lint` passed.
+- `npm run build` passed.
 
 ---
 

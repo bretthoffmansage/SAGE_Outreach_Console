@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { Card, Pill, Button } from "@/components/ui";
 import { CampaignRouteSection, DashboardSection } from "@/components/campaign-sections";
 import { ReviewRouteSection } from "@/components/review-sections";
+import { LibraryRouteSection } from "@/components/library-sections";
 import { navGroups } from "@/lib/navigation";
 import { getDashboardMetrics, getIntegrationSummary, getLibraryCoverage, getWorkflowPreview } from "@/lib/data";
 import { titleFromSlug } from "@/lib/utils";
@@ -91,6 +92,16 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
       <AppShell title={title}>
         <div className="mx-auto max-w-7xl">
           <ReviewRouteSection slug={slug} />
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (slug[0] === "libraries") {
+    return (
+      <AppShell title={title}>
+        <div className="mx-auto max-w-7xl">
+          <LibraryRouteSection slug={slug} />
         </div>
       </AppShell>
     );
