@@ -328,7 +328,7 @@ function AllApprovalsTable({ items }: { items: ApprovalItem[] }) {
     <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
       <ControlPanel className="p-4">
         <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-3">
-          {["All owners", "Bari", "Blue", "Internal", "High risk"].map((filter) => (
+          {["All owners", "Internal", "Bari", "Blue", "High risk"].map((filter) => (
             <button key={filter} onClick={() => setActiveFilter(filter)} type="button">
               <Pill tone={filter === "All owners" ? "purple" : filter === "Bari" ? "amber" : filter === "Blue" ? "blue" : filter === "Internal" ? "green" : "red"}>
                 {filter}

@@ -359,96 +359,47 @@ function filterCountFor(key: LibraryKey, filter: string, rows: InventoryRecord[]
   return rows.filter((row) => rowMatchesFilter(key, row, filter)).length;
 }
 
-function statusStripFor(key: LibraryKey, rows: InventoryRecord[]) {
-  if (key === "email") {
-    return [
-      { label: "Gold", value: rows.filter((row) => row.status === "gold").length, tone: "green" },
-      { label: "Silver", value: rows.filter((row) => row.status === "silver").length, tone: "blue" },
-      { label: "Bronze", value: rows.filter((row) => row.status === "bronze").length, tone: "blue" },
-      { label: "Needs Review", value: rows.filter((row) => row.status === "needs_review").length, tone: "amber" },
-      { label: "Rejected", value: rows.filter((row) => row.status === "rejected").length, tone: "red" },
-    ];
+/** Semantic dot tone per page filter (matches previous status-strip meaning). */
+function filterChipDotTone(key: LibraryKey, filter: string): "green" | "amber" | "red" | "blue" | "purple" | "gray" {
+  if (filter === "All") {
+    if (key === "learning") return "purple";
+    return "blue";
   }
-
   if (key === "offers") {
-    return [
-      { label: "Active", value: rows.filter((row) => row.status === "active").length, tone: "green" },
-      { label: "Approved", value: rows.filter((row) => row.status === "active").length, tone: "green" },
-      { label: "Needs Blue", value: rows.filter((row) => row.status === "needs_blue_approval").length, tone: "amber" },
-      { label: "Possible Ideas", value: rows.filter((row) => row.status === "possible_idea").length, tone: "blue" },
-      { label: "Retired", value: rows.filter((row) => row.status === "retired").length, tone: "gray" },
-    ];
+    if (filter === "Active" || filter === "Approved") return "green";
+    if (filter === "Needs Blue Approval") return "amber";
+    if (filter === "Possible Idea") return "blue";
+    return "gray";
   }
-
   if (key === "voice-rules") {
-    return [
-      { label: "Blocking", value: rows.filter((row) => row.cells[1].toLowerCase() === "blocking").length, tone: "red" },
-      { label: "Warning", value: rows.filter((row) => row.cells[1].toLowerCase() === "warning").length, tone: "amber" },
-      { label: "Guidance", value: rows.filter((row) => row.cells[1].toLowerCase() === "guidance").length, tone: "blue" },
-      { label: "Inactive", value: rows.filter((row) => row.status === "inactive").length, tone: "gray" },
-    ];
+    if (filter === "Blocking") return "red";
+    if (filter === "Warning") return "amber";
+    return "blue";
   }
-
   if (key === "signoffs") {
-    return [
-      { label: "Records", value: rows.length, tone: "blue" },
-      { label: "Active", value: rows.filter((row) => row.status === "active").length, tone: "green" },
-      { label: "Auto-selectable", value: rows.filter((row) => row.cells[3].toLowerCase() === "yes").length, tone: "green" },
-      { label: "Needs Bari", value: rows.filter((row) => row.cells[4].toLowerCase() === "yes").length, tone: "amber" },
-      { label: "Blocked", value: rows.filter((row) => row.status === "blocked").length, tone: "red" },
-    ];
+    if (filter === "Active" || filter === "Auto-selectable") return "green";
+    if (filter === "Requires Bari Review") return "amber";
+    return "gray";
   }
-
   if (key === "audiences") {
-    return [
-      { label: "Records", value: rows.length, tone: "blue" },
-      { label: "Active", value: rows.filter((row) => row.status === "active").length, tone: "green" },
-      { label: "Demo", value: rows.filter((row) => row.status === "demo").length, tone: "blue" },
-      { label: "Manual", value: rows.filter((row) => row.status === "manual").length, tone: "blue" },
-      { label: "Needs Review", value: rows.filter((row) => row.status === "needs_review").length, tone: "amber" },
-    ];
+    if (filter === "Active") return "green";
+    if (filter === "Demo" || filter === "Manual") return "blue";
+    if (filter === "Needs Review") return "amber";
+    return "gray";
   }
-
   if (key === "compliance") {
-    return [
-      { label: "Rules", value: rows.length, tone: "blue" },
-      { label: "Blocking", value: rows.filter((row) => row.cells[1].toLowerCase() === "blocking").length, tone: "red" },
-      { label: "Warning", value: rows.filter((row) => row.cells[1].toLowerCase() === "warning").length, tone: "amber" },
-      { label: "Guidance", value: rows.filter((row) => row.cells[1].toLowerCase() === "guidance").length, tone: "blue" },
-      { label: "Inactive", value: rows.filter((row) => row.status === "inactive").length, tone: "gray" },
-    ];
+    if (filter === "Blocking") return "red";
+    if (filter === "Warning") return "amber";
+    if (filter === "Guidance") return "blue";
+    return "gray";
   }
-
-  return [
-    { label: "Candidate", value: rows.filter((row) => row.status === "candidate").length, tone: "amber" },
-    { label: "Approved", value: rows.filter((row) => row.status === "approved").length, tone: "green" },
-    { label: "Rejected", value: rows.filter((row) => row.status === "rejected").length, tone: "red" },
-    { label: "Archived", value: rows.filter((row) => row.status === "archived").length, tone: "gray" },
-  ];
-}
-
-function InventoryStatusStrip({ items, libraryKey }: { items: Array<{ label: string; value: number; tone: string }>; libraryKey: LibraryKey }) {
-  return (
-    <ControlPanel className="p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        {items.map((item) => (
-          libraryKey === "email" ? (
-            <div className={cn("inline-flex items-center gap-2 rounded-lg border px-3 py-1.5", sourceRatingStyles(item.label).badge)} key={item.label}>
-              <span className={cn("h-2.5 w-2.5 rounded-full", sourceRatingStyles(item.label).dot)} />
-              <span className="text-xs font-semibold">{item.label}</span>
-              <span className="text-xs font-bold">{item.value}</span>
-            </div>
-          ) : (
-            <div className="inline-flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/75 px-3 py-1.5" key={item.label}>
-              <StatusDot tone={item.tone} />
-              <span className="text-xs font-semibold text-slate-200">{item.label}</span>
-              <span className="text-xs font-bold text-slate-50">{item.value}</span>
-            </div>
-          )
-        ))}
-      </div>
-    </ControlPanel>
-  );
+  if (key === "learning") {
+    if (filter === "Candidate") return "amber";
+    if (filter === "Approved") return "green";
+    if (filter === "Rejected") return "red";
+    return "gray";
+  }
+  return "gray";
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -669,8 +620,6 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
   }, [filteredRows, selectedId]);
   const selectedRecord = filteredRows.find((row) => row.id === resolvedSelectedId);
 
-  const strip = statusStripFor(key, allRows);
-
   return (
     <div className="space-y-5">
       <SectionHeader
@@ -708,7 +657,8 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
       <div className="flex flex-wrap gap-2">
         {config.filters.map((filter) => {
           const isActive = filter === activeFilter;
-          const count = key === "email" ? filterCountFor(key, filter, allRows) : null;
+          const count = filterCountFor(key, filter, allRows);
+          const dotTone = key === "email" ? null : filterChipDotTone(key, filter);
           return (
             <button
               className={cn(
@@ -728,30 +678,32 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
             >
               {key === "email" && filter !== "All" ? (
                 <span className={cn("h-2.5 w-2.5 rounded-full", sourceRatingStyles(filter).dot)} />
-              ) : (
+              ) : key === "email" ? (
                 <StatusDot tone={isActive ? "blue" : "gray"} />
+              ) : (
+                <StatusDot tone={dotTone ?? "gray"} />
               )}
               {filter}
-              {key === "email" ? (
-                <span
-                  className={cn(
-                    "rounded px-1.5 py-0.5 text-[0.62rem] font-bold leading-none",
-                    filter === "All"
+              <span
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[0.62rem] font-bold leading-none",
+                  key === "email" && filter !== "All"
+                    ? sourceRatingStyles(filter).badge
+                    : filter === "All"
                       ? isActive
                         ? "bg-sky-500/25 text-sky-100"
                         : "bg-slate-800 text-slate-300"
-                      : sourceRatingStyles(filter).badge,
-                  )}
-                >
-                  {count}
-                </span>
-              ) : null}
+                      : isActive
+                        ? "bg-sky-500/20 text-sky-100"
+                        : "bg-slate-800 text-slate-300",
+                )}
+              >
+                {count}
+              </span>
             </button>
           );
         })}
       </div>
-
-      {key === "email" ? null : <InventoryStatusStrip items={strip} libraryKey={key} />}
 
       {key === "learning" ? (
         <ControlPanel className="p-4">
