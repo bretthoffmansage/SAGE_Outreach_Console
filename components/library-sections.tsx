@@ -2,7 +2,7 @@
 
 import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, BookOpen, Filter, Search, Sparkles } from "lucide-react";
 import type { LearningInsight, LibraryItem } from "@/lib/domain";
 import { Button, ConsoleTable, ControlPanel, InlineAction, SectionHeader, StatusBadge, StatusDot, Td, Th, TableHead } from "@/components/ui";
@@ -19,6 +19,9 @@ type InventoryRecord = {
   source: LibraryItem | LearningInsight;
   kind: "library" | "learning";
 };
+
+type EditorDraft = Record<string, string | number | boolean>;
+type EditorMode = "view" | "edit" | "create";
 
 const libraryPageConfig: Record<LibraryKey, { title: string; summary: string; tone: string; filters: string[]; columns: string[] }> = {
   offers: {
@@ -454,8 +457,471 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SelectedRecordPanel({ keyName, record }: { keyName: LibraryKey; record?: InventoryRecord }) {
-  if (!record) {
+const inputStyles = "focus-ring w-full rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500";
+const textareaStyles = `${inputStyles} min-h-[96px] resize-y`;
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="grid gap-2">
+      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function boolFromDraft(value: string | number | boolean | undefined) {
+  return value === true;
+}
+
+function stringFromDraft(value: string | number | boolean | undefined) {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  return "";
+}
+
+function numberFromDraft(value: string | number | boolean | undefined) {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") return Number(value) || 0;
+  return 0;
+}
+
+function createRecordId(key: LibraryKey) {
+  const prefixMap: Record<LibraryKey, string> = {
+    offers: "offer",
+    email: "email",
+    "voice-rules": "rule",
+    signoffs: "signoff",
+    audiences: "aud",
+    compliance: "comp",
+    learning: "learn",
+  };
+  return `${prefixMap[key]}_${Date.now()}`;
+}
+
+function createEmptyDraft(key: LibraryKey): EditorDraft {
+  if (key === "email") {
+    return {
+      titleSubject: "",
+      rating: "needs_review",
+      sourceType: "",
+      associatedCampaign: "",
+      lastUsed: "",
+      allowedForBariVoiceRetrieval: false,
+      excerpt: "",
+      whyThisSourceMatters: "",
+      usageNotes: "",
+      lastTouched: "",
+    };
+  }
+  if (key === "offers") {
+    return {
+      name: "",
+      type: "offer",
+      status: "active",
+      approvalOwner: "",
+      allowedChannels: "",
+      allowedAudiences: "",
+      lastUsed: "",
+      performance: "",
+      description: "",
+      usageNotes: "",
+      lastTouched: "",
+    };
+  }
+  if (key === "voice-rules") {
+    return {
+      rule: "",
+      severity: "guidance",
+      status: "Active",
+      summary: "",
+      usageNotes: "",
+      lastTouched: "",
+    };
+  }
+  if (key === "signoffs") {
+    return {
+      signoffText: "",
+      allowedContexts: "",
+      status: "active",
+      agentAutoChoose: false,
+      requiresBariReview: false,
+      exampleUsage: "",
+      usageNotes: "",
+      lastTouched: "",
+    };
+  }
+  if (key === "audiences") {
+    return {
+      audienceName: "",
+      source: "",
+      status: "active",
+      estimatedSize: "",
+      allowedOffers: "",
+      exclusions: "",
+      lastUsed: "",
+      performance: "",
+      description: "",
+      usageNotes: "",
+      lastTouched: "",
+    };
+  }
+  if (key === "compliance") {
+    return {
+      rule: "",
+      severity: "guidance",
+      claimType: "",
+      status: "guidance",
+      channels: "",
+      owner: "",
+      examples: "",
+      summary: "",
+      usageNotes: "",
+      lastTouched: "",
+    };
+  }
+  return {
+    insight: "",
+    source: "bari_edit",
+    confidence: 75,
+    status: "candidate",
+    appliesTo: "",
+    lastUsed: "",
+    description: "",
+    usageNotes: "",
+    lastTouched: "",
+  };
+}
+
+function draftFromRecord(key: LibraryKey, record?: InventoryRecord): EditorDraft {
+  if (!record) return createEmptyDraft(key);
+
+  if (record.kind === "learning") {
+    const insight = record.source as LearningInsight;
+    return {
+      insight: insight.title,
+      source: insight.source,
+      confidence: Math.round(insight.confidence * 100),
+      status: insight.status,
+      appliesTo: readLearningString(insight, "appliesTo", ""),
+      lastUsed: readLearningString(insight, "lastUsed", ""),
+      description: insight.summary,
+      usageNotes: readLearningString(insight, "notes", ""),
+      lastTouched: readLearningString(insight, "lastTouched", ""),
+    };
+  }
+
+  const item = record.source as LibraryItem;
+  if (key === "email") {
+    return {
+      titleSubject: readPayloadString(item, "subjectTitle", item.name),
+      rating: item.status,
+      sourceType: readPayloadString(item, "sourceType", ""),
+      associatedCampaign: readPayloadString(item, "associatedCampaign", ""),
+      lastUsed: readPayloadString(item, "lastUsed", ""),
+      allowedForBariVoiceRetrieval: readPayloadBoolean(item, "allowedForBariVoice", false),
+      excerpt: readPayloadString(item, "excerpt", ""),
+      whyThisSourceMatters: readPayloadString(item, "whyItMatters", item.summary),
+      usageNotes: readPayloadString(item, "usageNotes", ""),
+      lastTouched: readPayloadString(item, "lastTouched", ""),
+    };
+  }
+  if (key === "offers") {
+    return {
+      name: item.name,
+      type: item.type,
+      status: item.status,
+      approvalOwner: readPayloadString(item, "approvalOwner", ""),
+      allowedChannels: readPayloadString(item, "allowedChannels", ""),
+      allowedAudiences: readPayloadString(item, "allowedAudiences", ""),
+      lastUsed: readPayloadString(item, "lastUsed", ""),
+      performance: readPayloadString(item, "performanceSignal", ""),
+      description: item.summary,
+      usageNotes: readPayloadString(item, "usageNotes", ""),
+      lastTouched: readPayloadString(item, "lastTouched", ""),
+    };
+  }
+  if (key === "voice-rules") {
+    return {
+      rule: item.name,
+      severity: readPayloadString(item, "severityLabel", formatLabel(item.status)),
+      status: readPayloadString(item, "lifecycleStatus", "Active"),
+      summary: item.summary,
+      usageNotes: readPayloadString(item, "usageNotes", ""),
+      lastTouched: readPayloadString(item, "lastTouched", ""),
+    };
+  }
+  if (key === "signoffs") {
+    return {
+      signoffText: readPayloadStringArray(item, "approvedVariants", [item.name]).join("\n"),
+      allowedContexts: readPayloadString(item, "allowedContexts", ""),
+      status: item.status,
+      agentAutoChoose: readPayloadBoolean(item, "agentAutoChoose", false),
+      requiresBariReview: readPayloadBoolean(item, "requiresBariReview", false),
+      exampleUsage: readPayloadString(item, "exampleUsage", ""),
+      usageNotes: readPayloadString(item, "notes", ""),
+      lastTouched: readPayloadString(item, "lastTouched", ""),
+    };
+  }
+  if (key === "audiences") {
+    return {
+      audienceName: item.name,
+      source: readPayloadString(item, "sourceType", ""),
+      status: item.status,
+      estimatedSize: readPayloadString(item, "estimatedSize", ""),
+      allowedOffers: readPayloadString(item, "allowedOffers", ""),
+      exclusions: readPayloadString(item, "exclusions", ""),
+      lastUsed: readPayloadString(item, "lastUsed", ""),
+      performance: readPayloadString(item, "performanceNotes", ""),
+      description: item.summary,
+      usageNotes: readPayloadString(item, "riskNotes", ""),
+      lastTouched: readPayloadString(item, "lastTouched", ""),
+    };
+  }
+  return {
+    rule: item.name,
+    severity: readPayloadString(item, "severityLabel", "Guidance"),
+    claimType: readPayloadString(item, "claimType", ""),
+    status: item.status,
+    channels: readPayloadString(item, "channels", ""),
+    owner: readPayloadString(item, "owner", ""),
+    examples: readPayloadString(item, "examples", ""),
+    summary: item.summary,
+    usageNotes: readPayloadString(item, "usageNotes", ""),
+    lastTouched: readPayloadString(item, "lastTouched", ""),
+  };
+}
+
+function patchForLibrarySave(key: LibraryKey, draft: EditorDraft, existing?: InventoryRecord) {
+  const existingItem = existing?.kind === "library" ? existing.source as LibraryItem : undefined;
+  const existingPayload = existingItem?.payload ?? {};
+  const tags = existingItem?.tags ?? [];
+  const riskLevel = existingItem?.riskLevel;
+
+  if (key === "email") {
+    return {
+      type: "email",
+      name: stringFromDraft(draft.titleSubject),
+      status: stringFromDraft(draft.rating),
+      summary: stringFromDraft(draft.whyThisSourceMatters) || stringFromDraft(draft.excerpt),
+      tags,
+      riskLevel,
+      payload: {
+        ...existingPayload,
+        subjectTitle: stringFromDraft(draft.titleSubject),
+        sourceType: stringFromDraft(draft.sourceType),
+        associatedCampaign: stringFromDraft(draft.associatedCampaign),
+        lastUsed: stringFromDraft(draft.lastUsed),
+        allowedForBariVoice: boolFromDraft(draft.allowedForBariVoiceRetrieval),
+        excerpt: stringFromDraft(draft.excerpt),
+        whyItMatters: stringFromDraft(draft.whyThisSourceMatters),
+        usageNotes: stringFromDraft(draft.usageNotes),
+        lastTouched: stringFromDraft(draft.lastTouched),
+      },
+    };
+  }
+  if (key === "offers") {
+    return {
+      type: stringFromDraft(draft.type),
+      name: stringFromDraft(draft.name),
+      status: stringFromDraft(draft.status),
+      summary: stringFromDraft(draft.description),
+      tags,
+      riskLevel,
+      payload: {
+        ...existingPayload,
+        approvalOwner: stringFromDraft(draft.approvalOwner),
+        allowedChannels: stringFromDraft(draft.allowedChannels),
+        allowedAudiences: stringFromDraft(draft.allowedAudiences),
+        lastUsed: stringFromDraft(draft.lastUsed),
+        performanceSignal: stringFromDraft(draft.performance),
+        usageNotes: stringFromDraft(draft.usageNotes),
+        lastTouched: stringFromDraft(draft.lastTouched),
+      },
+    };
+  }
+  if (key === "voice-rules") {
+    const severity = stringFromDraft(draft.severity).toLowerCase();
+    return {
+      type: "voice_rule",
+      name: stringFromDraft(draft.rule),
+      status: severity,
+      summary: stringFromDraft(draft.summary),
+      tags,
+      riskLevel,
+      payload: {
+        ...existingPayload,
+        severityLabel: formatLabel(severity),
+        lifecycleStatus: stringFromDraft(draft.status),
+        usageNotes: stringFromDraft(draft.usageNotes),
+        lastTouched: stringFromDraft(draft.lastTouched),
+      },
+    };
+  }
+  if (key === "signoffs") {
+    return {
+      type: "signoff",
+      name: stringFromDraft(draft.signoffText).split("\n")[0] || "New sign-off",
+      status: stringFromDraft(draft.status),
+      summary: stringFromDraft(draft.exampleUsage),
+      tags,
+      riskLevel,
+      payload: {
+        ...existingPayload,
+        approvedVariants: stringFromDraft(draft.signoffText).split("\n").map((line) => line.trim()).filter(Boolean),
+        allowedContexts: stringFromDraft(draft.allowedContexts),
+        agentAutoChoose: boolFromDraft(draft.agentAutoChoose),
+        requiresBariReview: boolFromDraft(draft.requiresBariReview),
+        exampleUsage: stringFromDraft(draft.exampleUsage),
+        notes: stringFromDraft(draft.usageNotes),
+        lastTouched: stringFromDraft(draft.lastTouched),
+      },
+    };
+  }
+  if (key === "audiences") {
+    return {
+      type: "audience",
+      name: stringFromDraft(draft.audienceName),
+      status: stringFromDraft(draft.status),
+      summary: stringFromDraft(draft.description),
+      tags,
+      riskLevel,
+      payload: {
+        ...existingPayload,
+        sourceType: stringFromDraft(draft.source),
+        sourceLabel: stringFromDraft(draft.source),
+        estimatedSize: stringFromDraft(draft.estimatedSize),
+        allowedOffers: stringFromDraft(draft.allowedOffers),
+        exclusions: stringFromDraft(draft.exclusions),
+        lastUsed: stringFromDraft(draft.lastUsed),
+        performanceNotes: stringFromDraft(draft.performance),
+        riskNotes: stringFromDraft(draft.usageNotes),
+        lastTouched: stringFromDraft(draft.lastTouched),
+      },
+    };
+  }
+  return {
+    type: "compliance_rule",
+    name: stringFromDraft(draft.rule),
+    status: stringFromDraft(draft.status),
+    summary: stringFromDraft(draft.summary),
+    tags,
+    riskLevel,
+    payload: {
+      ...existingPayload,
+      severityLabel: stringFromDraft(draft.severity),
+      lifecycleStatus: stringFromDraft(draft.status) === "inactive" ? "Inactive" : "Active",
+      claimType: stringFromDraft(draft.claimType),
+      channels: stringFromDraft(draft.channels),
+      owner: stringFromDraft(draft.owner),
+      examples: stringFromDraft(draft.examples),
+      usageNotes: stringFromDraft(draft.usageNotes),
+      lastTouched: stringFromDraft(draft.lastTouched),
+    },
+  };
+}
+
+function patchForLearningSave(draft: EditorDraft, existing?: InventoryRecord) {
+  const existingInsight = existing?.kind === "learning" ? existing.source as LearningInsight : undefined;
+  return {
+    source: stringFromDraft(draft.source),
+    status: stringFromDraft(draft.status),
+    title: stringFromDraft(draft.insight),
+    summary: stringFromDraft(draft.description),
+    confidence: numberFromDraft(draft.confidence) / 100,
+    payload: {
+      ...(existingInsight?.payload ?? {}),
+      appliesTo: stringFromDraft(draft.appliesTo),
+      lastUsed: stringFromDraft(draft.lastUsed),
+      notes: stringFromDraft(draft.usageNotes),
+      lastTouched: stringFromDraft(draft.lastTouched),
+    },
+  };
+}
+
+function EditorActions({
+  mode,
+  saving,
+  onEdit,
+  onSave,
+  onCancel,
+}: {
+  mode: EditorMode;
+  saving: boolean;
+  onEdit: () => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  if (mode === "view") {
+    return (
+      <button className="focus-ring rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-800" onClick={onEdit} type="button">
+        Edit
+      </button>
+    );
+  }
+  return (
+    <div className="flex gap-2">
+      <button className="focus-ring rounded-lg border border-sky-500/60 bg-sky-500 px-3 py-1.5 text-sm font-semibold text-slate-950 hover:bg-sky-400 disabled:opacity-60" disabled={saving} onClick={onSave} type="button">
+        {mode === "create" ? "Create" : "Save"}
+      </button>
+      <button className="focus-ring rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-60" disabled={saving} onClick={onCancel} type="button">
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+function SelectedRecordPanel({
+  keyName,
+  record,
+  mode,
+  draft,
+  saving,
+  error,
+  savedMessage,
+  onEdit,
+  onSave,
+  onCancel,
+  onDraftChange,
+}: {
+  keyName: LibraryKey;
+  record?: InventoryRecord;
+  mode: EditorMode;
+  draft: EditorDraft;
+  saving: boolean;
+  error: string | null;
+  savedMessage: string | null;
+  onEdit: () => void;
+  onSave: () => void;
+  onCancel: () => void;
+  onDraftChange: (field: string, value: string | number | boolean) => void;
+}) {
+  const isEditing = mode !== "view";
+  const heading = (
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Selected record</p>
+        <h3 className="mt-2 text-lg font-semibold text-slate-100">
+          {mode === "create" ? `Add ${libraryPageConfig[keyName].title.slice(0, -1) || "Record"}` : record?.title ?? "Select a record"}
+        </h3>
+      </div>
+      <div className="flex flex-col items-end gap-2">
+        {mode === "view" && record ? (
+          keyName === "email"
+            ? <SourceRatingBadge value={record.status} />
+            : <StatusBadge tone={toneForStatus(record.status)}>{formatLabel(record.status)}</StatusBadge>
+        ) : null}
+        <EditorActions mode={mode} saving={saving} onEdit={onEdit} onSave={onSave} onCancel={onCancel} />
+      </div>
+    </div>
+  );
+
+  if (!record && mode === "view") {
     return (
       <ControlPanel className="p-4">
         <p className="text-sm font-semibold text-slate-100">Selected record</p>
@@ -464,15 +930,119 @@ function SelectedRecordPanel({ keyName, record }: { keyName: LibraryKey; record?
     );
   }
 
-  const heading = (
-    <div className="flex items-start justify-between gap-3">
-      <div>
-        <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Selected record</p>
-        <h3 className="mt-2 text-lg font-semibold text-slate-100">{record.title}</h3>
-      </div>
-      {keyName === "email" ? <SourceRatingBadge value={record.status} /> : <StatusBadge tone={toneForStatus(record.status)}>{formatLabel(record.status)}</StatusBadge>}
-    </div>
-  );
+  if (isEditing) {
+    return (
+      <ControlPanel className="p-4">
+        {heading}
+        {error ? <div className="mt-4 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">{error}</div> : null}
+        {savedMessage ? <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">{savedMessage}</div> : null}
+        <div className="mt-4 grid gap-4 text-sm">
+          {keyName === "email" ? (
+            <>
+              <Field label="Title / Subject"><input className={inputStyles} value={stringFromDraft(draft.titleSubject)} onChange={(e) => onDraftChange("titleSubject", e.target.value)} /></Field>
+              <Field label="Rating">
+                <select className={inputStyles} value={stringFromDraft(draft.rating)} onChange={(e) => onDraftChange("rating", e.target.value)}>
+                  {["gold", "silver", "bronze", "needs_review", "rejected"].map((option) => <option key={option} value={option}>{formatLabel(option)}</option>)}
+                </select>
+              </Field>
+              <Field label="Source Type"><input className={inputStyles} value={stringFromDraft(draft.sourceType)} onChange={(e) => onDraftChange("sourceType", e.target.value)} /></Field>
+              <Field label="Associated Campaign"><input className={inputStyles} value={stringFromDraft(draft.associatedCampaign)} onChange={(e) => onDraftChange("associatedCampaign", e.target.value)} /></Field>
+              <Field label="Last Used"><input className={inputStyles} value={stringFromDraft(draft.lastUsed)} onChange={(e) => onDraftChange("lastUsed", e.target.value)} /></Field>
+              <label className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/65 px-3 py-2.5 text-sm text-slate-200">
+                Allowed for Bari voice retrieval
+                <input checked={boolFromDraft(draft.allowedForBariVoiceRetrieval)} onChange={(e) => onDraftChange("allowedForBariVoiceRetrieval", e.target.checked)} type="checkbox" />
+              </label>
+              <Field label="Excerpt"><textarea className={textareaStyles} value={stringFromDraft(draft.excerpt)} onChange={(e) => onDraftChange("excerpt", e.target.value)} /></Field>
+              <Field label="Why This Source Matters"><textarea className={textareaStyles} value={stringFromDraft(draft.whyThisSourceMatters)} onChange={(e) => onDraftChange("whyThisSourceMatters", e.target.value)} /></Field>
+              <Field label="Usage Notes"><textarea className={textareaStyles} value={stringFromDraft(draft.usageNotes)} onChange={(e) => onDraftChange("usageNotes", e.target.value)} /></Field>
+              <Field label="Last Touched"><input className={inputStyles} value={stringFromDraft(draft.lastTouched)} onChange={(e) => onDraftChange("lastTouched", e.target.value)} /></Field>
+            </>
+          ) : null}
+          {keyName === "offers" ? (
+            <>
+              <Field label="Name"><input className={inputStyles} value={stringFromDraft(draft.name)} onChange={(e) => onDraftChange("name", e.target.value)} /></Field>
+              <Field label="Type"><select className={inputStyles} value={stringFromDraft(draft.type)} onChange={(e) => onDraftChange("type", e.target.value)}>{["offer", "lead_magnet"].map((option) => <option key={option} value={option}>{formatLabel(option)}</option>)}</select></Field>
+              <Field label="Status"><select className={inputStyles} value={stringFromDraft(draft.status)} onChange={(e) => onDraftChange("status", e.target.value)}>{["active", "needs_blue_approval", "possible_idea", "paused", "retired"].map((option) => <option key={option} value={option}>{formatLabel(option)}</option>)}</select></Field>
+              <Field label="Approval Owner"><input className={inputStyles} value={stringFromDraft(draft.approvalOwner)} onChange={(e) => onDraftChange("approvalOwner", e.target.value)} /></Field>
+              <Field label="Allowed Channels"><input className={inputStyles} value={stringFromDraft(draft.allowedChannels)} onChange={(e) => onDraftChange("allowedChannels", e.target.value)} /></Field>
+              <Field label="Allowed Audiences"><input className={inputStyles} value={stringFromDraft(draft.allowedAudiences)} onChange={(e) => onDraftChange("allowedAudiences", e.target.value)} /></Field>
+              <Field label="Last Used"><input className={inputStyles} value={stringFromDraft(draft.lastUsed)} onChange={(e) => onDraftChange("lastUsed", e.target.value)} /></Field>
+              <Field label="Performance"><input className={inputStyles} value={stringFromDraft(draft.performance)} onChange={(e) => onDraftChange("performance", e.target.value)} /></Field>
+              <Field label="Description"><textarea className={textareaStyles} value={stringFromDraft(draft.description)} onChange={(e) => onDraftChange("description", e.target.value)} /></Field>
+              <Field label="Usage Notes"><textarea className={textareaStyles} value={stringFromDraft(draft.usageNotes)} onChange={(e) => onDraftChange("usageNotes", e.target.value)} /></Field>
+              <Field label="Last Touched"><input className={inputStyles} value={stringFromDraft(draft.lastTouched)} onChange={(e) => onDraftChange("lastTouched", e.target.value)} /></Field>
+            </>
+          ) : null}
+          {keyName === "voice-rules" ? (
+            <>
+              <Field label="Rule"><input className={inputStyles} value={stringFromDraft(draft.rule)} onChange={(e) => onDraftChange("rule", e.target.value)} /></Field>
+              <Field label="Severity / Type"><select className={inputStyles} value={stringFromDraft(draft.severity)} onChange={(e) => onDraftChange("severity", e.target.value)}>{["Blocking", "Warning", "Guidance"].map((option) => <option key={option} value={option}>{option}</option>)}</select></Field>
+              <Field label="Status"><select className={inputStyles} value={stringFromDraft(draft.status)} onChange={(e) => onDraftChange("status", e.target.value)}>{["Active", "Inactive"].map((option) => <option key={option} value={option}>{option}</option>)}</select></Field>
+              <Field label="Summary"><textarea className={textareaStyles} value={stringFromDraft(draft.summary)} onChange={(e) => onDraftChange("summary", e.target.value)} /></Field>
+              <Field label="Usage Notes"><textarea className={textareaStyles} value={stringFromDraft(draft.usageNotes)} onChange={(e) => onDraftChange("usageNotes", e.target.value)} /></Field>
+              <Field label="Last Touched"><input className={inputStyles} value={stringFromDraft(draft.lastTouched)} onChange={(e) => onDraftChange("lastTouched", e.target.value)} /></Field>
+            </>
+          ) : null}
+          {keyName === "signoffs" ? (
+            <>
+              <Field label="Sign-off Text"><textarea className={textareaStyles} value={stringFromDraft(draft.signoffText)} onChange={(e) => onDraftChange("signoffText", e.target.value)} /></Field>
+              <Field label="Allowed Contexts"><input className={inputStyles} value={stringFromDraft(draft.allowedContexts)} onChange={(e) => onDraftChange("allowedContexts", e.target.value)} /></Field>
+              <Field label="Status"><select className={inputStyles} value={stringFromDraft(draft.status)} onChange={(e) => onDraftChange("status", e.target.value)}>{["active", "inactive"].map((option) => <option key={option} value={option}>{formatLabel(option)}</option>)}</select></Field>
+              <label className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/65 px-3 py-2.5 text-sm text-slate-200">Agent Auto Choose<input checked={boolFromDraft(draft.agentAutoChoose)} onChange={(e) => onDraftChange("agentAutoChoose", e.target.checked)} type="checkbox" /></label>
+              <label className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/65 px-3 py-2.5 text-sm text-slate-200">Requires Bari Review<input checked={boolFromDraft(draft.requiresBariReview)} onChange={(e) => onDraftChange("requiresBariReview", e.target.checked)} type="checkbox" /></label>
+              <Field label="Example Usage"><textarea className={textareaStyles} value={stringFromDraft(draft.exampleUsage)} onChange={(e) => onDraftChange("exampleUsage", e.target.value)} /></Field>
+              <Field label="Usage Notes"><textarea className={textareaStyles} value={stringFromDraft(draft.usageNotes)} onChange={(e) => onDraftChange("usageNotes", e.target.value)} /></Field>
+              <Field label="Last Touched"><input className={inputStyles} value={stringFromDraft(draft.lastTouched)} onChange={(e) => onDraftChange("lastTouched", e.target.value)} /></Field>
+            </>
+          ) : null}
+          {keyName === "audiences" ? (
+            <>
+              <Field label="Audience Name"><input className={inputStyles} value={stringFromDraft(draft.audienceName)} onChange={(e) => onDraftChange("audienceName", e.target.value)} /></Field>
+              <Field label="Source"><input className={inputStyles} value={stringFromDraft(draft.source)} onChange={(e) => onDraftChange("source", e.target.value)} /></Field>
+              <Field label="Status"><select className={inputStyles} value={stringFromDraft(draft.status)} onChange={(e) => onDraftChange("status", e.target.value)}>{["active", "demo", "manual", "needs_review"].map((option) => <option key={option} value={option}>{formatLabel(option)}</option>)}</select></Field>
+              <Field label="Estimated Size"><input className={inputStyles} value={stringFromDraft(draft.estimatedSize)} onChange={(e) => onDraftChange("estimatedSize", e.target.value)} /></Field>
+              <Field label="Allowed Offers"><input className={inputStyles} value={stringFromDraft(draft.allowedOffers)} onChange={(e) => onDraftChange("allowedOffers", e.target.value)} /></Field>
+              <Field label="Exclusions"><textarea className={textareaStyles} value={stringFromDraft(draft.exclusions)} onChange={(e) => onDraftChange("exclusions", e.target.value)} /></Field>
+              <Field label="Last Used"><input className={inputStyles} value={stringFromDraft(draft.lastUsed)} onChange={(e) => onDraftChange("lastUsed", e.target.value)} /></Field>
+              <Field label="Performance"><input className={inputStyles} value={stringFromDraft(draft.performance)} onChange={(e) => onDraftChange("performance", e.target.value)} /></Field>
+              <Field label="Description"><textarea className={textareaStyles} value={stringFromDraft(draft.description)} onChange={(e) => onDraftChange("description", e.target.value)} /></Field>
+              <Field label="Usage Notes"><textarea className={textareaStyles} value={stringFromDraft(draft.usageNotes)} onChange={(e) => onDraftChange("usageNotes", e.target.value)} /></Field>
+              <Field label="Last Touched"><input className={inputStyles} value={stringFromDraft(draft.lastTouched)} onChange={(e) => onDraftChange("lastTouched", e.target.value)} /></Field>
+            </>
+          ) : null}
+          {keyName === "compliance" ? (
+            <>
+              <Field label="Rule"><input className={inputStyles} value={stringFromDraft(draft.rule)} onChange={(e) => onDraftChange("rule", e.target.value)} /></Field>
+              <Field label="Severity / Type"><select className={inputStyles} value={stringFromDraft(draft.severity)} onChange={(e) => onDraftChange("severity", e.target.value)}>{["Blocking", "Warning", "Guidance"].map((option) => <option key={option} value={option}>{option}</option>)}</select></Field>
+              <Field label="Claim Type"><input className={inputStyles} value={stringFromDraft(draft.claimType)} onChange={(e) => onDraftChange("claimType", e.target.value)} /></Field>
+              <Field label="Status"><select className={inputStyles} value={stringFromDraft(draft.status)} onChange={(e) => onDraftChange("status", e.target.value)}>{["blocking", "warning", "guidance", "inactive"].map((option) => <option key={option} value={option}>{formatLabel(option)}</option>)}</select></Field>
+              <Field label="Channels"><input className={inputStyles} value={stringFromDraft(draft.channels)} onChange={(e) => onDraftChange("channels", e.target.value)} /></Field>
+              <Field label="Owner"><input className={inputStyles} value={stringFromDraft(draft.owner)} onChange={(e) => onDraftChange("owner", e.target.value)} /></Field>
+              <Field label="Examples"><textarea className={textareaStyles} value={stringFromDraft(draft.examples)} onChange={(e) => onDraftChange("examples", e.target.value)} /></Field>
+              <Field label="Summary"><textarea className={textareaStyles} value={stringFromDraft(draft.summary)} onChange={(e) => onDraftChange("summary", e.target.value)} /></Field>
+              <Field label="Usage Notes"><textarea className={textareaStyles} value={stringFromDraft(draft.usageNotes)} onChange={(e) => onDraftChange("usageNotes", e.target.value)} /></Field>
+              <Field label="Last Touched"><input className={inputStyles} value={stringFromDraft(draft.lastTouched)} onChange={(e) => onDraftChange("lastTouched", e.target.value)} /></Field>
+            </>
+          ) : null}
+          {keyName === "learning" ? (
+            <>
+              <Field label="Insight"><input className={inputStyles} value={stringFromDraft(draft.insight)} onChange={(e) => onDraftChange("insight", e.target.value)} /></Field>
+              <Field label="Source"><select className={inputStyles} value={stringFromDraft(draft.source)} onChange={(e) => onDraftChange("source", e.target.value)}>{["bari_edit", "blue_decision", "campaign_performance", "helpdesk_reply", "agent_evaluation"].map((option) => <option key={option} value={option}>{formatLabel(option)}</option>)}</select></Field>
+              <Field label="Confidence"><input className={inputStyles} min={0} max={100} type="number" value={numberFromDraft(draft.confidence)} onChange={(e) => onDraftChange("confidence", Number(e.target.value) || 0)} /></Field>
+              <Field label="Status"><select className={inputStyles} value={stringFromDraft(draft.status)} onChange={(e) => onDraftChange("status", e.target.value)}>{["candidate", "approved", "rejected", "archived"].map((option) => <option key={option} value={option}>{formatLabel(option)}</option>)}</select></Field>
+              <Field label="Applies To"><input className={inputStyles} value={stringFromDraft(draft.appliesTo)} onChange={(e) => onDraftChange("appliesTo", e.target.value)} /></Field>
+              <Field label="Last Used"><input className={inputStyles} value={stringFromDraft(draft.lastUsed)} onChange={(e) => onDraftChange("lastUsed", e.target.value)} /></Field>
+              <Field label="Description"><textarea className={textareaStyles} value={stringFromDraft(draft.description)} onChange={(e) => onDraftChange("description", e.target.value)} /></Field>
+              <Field label="Usage Notes"><textarea className={textareaStyles} value={stringFromDraft(draft.usageNotes)} onChange={(e) => onDraftChange("usageNotes", e.target.value)} /></Field>
+              <Field label="Last Touched"><input className={inputStyles} value={stringFromDraft(draft.lastTouched)} onChange={(e) => onDraftChange("lastTouched", e.target.value)} /></Field>
+            </>
+          ) : null}
+        </div>
+      </ControlPanel>
+    );
+  }
+
+  if (!record) return null;
 
   if (record.kind === "learning") {
     const insight = record.source as LearningInsight;
@@ -480,6 +1050,8 @@ function SelectedRecordPanel({ keyName, record }: { keyName: LibraryKey; record?
     return (
       <ControlPanel className="p-4">
         {heading}
+        {savedMessage ? <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">{savedMessage}</div> : null}
+        {error ? <div className="mt-4 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">{error}</div> : null}
         <div className="mt-4 grid gap-2 text-sm">
           <DetailRow label="Insight" value={insight.title} />
           <DetailRow label="Source" value={formatLabel(insight.source)} />
@@ -652,6 +1224,11 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
   const config = libraryPageConfig[key] ?? libraryPageConfig.offers;
   const [activeFilter, setActiveFilter] = useState(config.filters[0] ?? "All");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editorMode, setEditorMode] = useState<EditorMode>("view");
+  const [draft, setDraft] = useState<EditorDraft>(() => createEmptyDraft(key));
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [demoNotice, setDemoNotice] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [librarySeedAttempted, setLibrarySeedAttempted] = useState(false);
@@ -660,6 +1237,8 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
   const convexLearningInsights = useQuery(api.library.listLearningInsights);
   const seedDefaultLibraryItemsIfEmpty = useMutation(api.library.seedDefaultLibraryItemsIfEmpty);
   const seedDefaultLearningInsightsIfEmpty = useMutation(api.library.seedDefaultLearningInsightsIfEmpty);
+  const upsertLibraryItem = useMutation(api.library.upsertLibraryItem);
+  const upsertLearningInsight = useMutation(api.library.upsertLearningInsight);
 
   useEffect(() => {
     if (key === "learning" || convexLibraryItems === undefined || convexLibraryItems.length > 0 || librarySeedAttempted) return;
@@ -697,6 +1276,90 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
   }, [filteredRows, selectedId]);
   const selectedRecord = filteredRows.find((row) => row.id === resolvedSelectedId);
 
+  useEffect(() => {
+    setActiveFilter(config.filters[0] ?? "All");
+    setSelectedId(null);
+    setEditorMode("view");
+    setDraft(createEmptyDraft(key));
+    setSaveError(null);
+    setSavedMessage(null);
+    setDemoNotice(null);
+  }, [config.filters, key]);
+
+  useEffect(() => {
+    if (editorMode === "create") return;
+    setDraft(draftFromRecord(key, selectedRecord));
+  }, [editorMode, key, selectedRecord]);
+
+  useEffect(() => {
+    if (!savedMessage) return;
+    const timeout = window.setTimeout(() => setSavedMessage(null), 2500);
+    return () => window.clearTimeout(timeout);
+  }, [savedMessage]);
+
+  const startCreate = () => {
+    setEditorMode("create");
+    setDraft(createEmptyDraft(key));
+    setSaveError(null);
+    setSavedMessage(null);
+    setDemoNotice(null);
+    setActiveFilter("All");
+  };
+
+  const startEdit = () => {
+    if (!selectedRecord) return;
+    setEditorMode("edit");
+    setDraft(draftFromRecord(key, selectedRecord));
+    setSaveError(null);
+    setSavedMessage(null);
+  };
+
+  const cancelEditing = () => {
+    setEditorMode("view");
+    setDraft(draftFromRecord(key, selectedRecord));
+    setSaveError(null);
+  };
+
+  const handleDraftChange = (field: string, value: string | number | boolean) => {
+    setDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveError(null);
+    setSavedMessage(null);
+
+    try {
+      const recordId = editorMode === "create" ? createRecordId(key) : selectedRecord?.id;
+      if (!recordId) {
+        setSaveError("Unable to save record. Check Convex connection.");
+        setIsSaving(false);
+        return;
+      }
+
+      if (key === "learning") {
+        await upsertLearningInsight({
+          recordId,
+          patch: patchForLearningSave(draft, selectedRecord),
+        });
+      } else {
+        await upsertLibraryItem({
+          recordId,
+          patch: patchForLibrarySave(key, draft, selectedRecord),
+        });
+      }
+
+      setSelectedId(recordId);
+      setEditorMode("view");
+      setSavedMessage(editorMode === "create" ? "Record created." : "Saved.");
+      setDemoNotice(null);
+    } catch {
+      setSaveError("Unable to save record. Check Convex connection.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <SectionHeader
@@ -705,7 +1368,7 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
         description={config.summary}
         actions={
           <>
-            <button className="focus-ring" onClick={() => setDemoNotice("Add record flow is not wired yet for the Library.")} type="button">
+            <button className="focus-ring" onClick={startCreate} type="button">
               <Button>
                 <BookOpen className="mr-2 h-4 w-4" />
                 Add record
@@ -866,7 +1529,9 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
                             onClick={(event) => {
                               event.stopPropagation();
                               setSelectedId(row.id);
-                              setDemoNotice(`Demo: ${cell} action queued for ${row.title}.`);
+                              setEditorMode("view");
+                              setSaveError(null);
+                              setSavedMessage(null);
                             }}
                             type="button"
                           >
@@ -884,7 +1549,21 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
         </ConsoleTable>
 
         <div className="space-y-4">
-          <SelectedRecordPanel keyName={key} record={selectedRecord} />
+          <SelectedRecordPanel
+            keyName={key}
+            record={editorMode === "create" ? undefined : selectedRecord}
+            mode={editorMode}
+            draft={draft}
+            saving={isSaving}
+            error={saveError}
+            savedMessage={savedMessage}
+            onEdit={startEdit}
+            onSave={() => {
+              void handleSave();
+            }}
+            onCancel={cancelEditing}
+            onDraftChange={handleDraftChange}
+          />
           {key === "learning" ? (
             <ControlPanel className="p-4">
               <p className="text-sm font-semibold text-slate-100">Learning actions</p>
