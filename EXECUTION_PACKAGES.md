@@ -384,7 +384,7 @@ Completed on 2026-04-30. Added admin settings surface for users/roles, agents/pr
 ---
 
 ## PKG-010 — UX Cohesion and Final MVP Polish
-Status: draft
+Status: ready
 
 ### Purpose
 Refine responsiveness, accessibility, copy, loading/empty/error states, visual cohesion, and non-technical user polish across the product.
@@ -392,8 +392,20 @@ Refine responsiveness, accessibility, copy, loading/empty/error states, visual c
 ### PRD coverage
 `PRD-007`, `PRD-022`, `PRD-027`
 
-### Scope
-To be expanded after feature surfaces exist.
+### Why now
+All primary MVP route surfaces now exist. Final package work should improve global polish, accessibility affordances, documentation, and handoff clarity before post-execution audit/hardening.
+
+### Expanded scope
+- Add global skip-link/focus affordances and app-shell footer/status messaging.
+- Add a concise application README section documenting demo routes, validation commands, and missing-credential posture.
+- Review generated drift and keep package clean.
+
+### Out of scope
+- Large visual redesign or new feature workflows.
+
+### Required checks
+- `npm run lint`
+- `npm run build`
 
 ---
 
