@@ -313,7 +313,7 @@ Completed on 2026-04-30. Added integration settings cards with purpose, status, 
 ---
 
 ## PKG-008 — Response Intelligence, Performance, and Learning Loop
-Status: ready
+Status: complete
 
 ### Purpose
 Implement HelpDesk response intelligence, manual import, response classifications, campaign matching, suggested reply drafts, performance dashboards/manual metrics, and learning candidates.
@@ -340,6 +340,13 @@ Campaigns, agents, libraries, and integrations are scaffolded. The post-send int
 
 ### Regression checks
 - Existing routes still compile and no live credentials are required.
+
+### Completion notes
+Completed on 2026-04-30. Added response intelligence route with HelpDesk-style classification, campaign match confidence, tabs, manual/suggested-reply posture, and no-auto-send messaging; added performance route with seeded metrics, analysis categories, and learning recommendation cards.
+
+### Validation evidence
+- `npm run lint` passed.
+- `npm run build` passed.
 
 ---
 
