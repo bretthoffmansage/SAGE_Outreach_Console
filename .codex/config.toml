@@ -1,0 +1,12 @@
+# ForgeShell — Codex project config for the `shell-core/` working tree.
+# Codex only loads project-scoped config when the project is trusted.
+
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+model = "gpt-5.5"
+
+# Operators and Codex sessions should run from this `shell-core/` directory as the shell root.
+project_root_markers = []
+
+# Repo-local instructions (workflow, resume, packaging) live in INSTRUCTIONS.md.
+model_instructions_file = "INSTRUCTIONS.md"

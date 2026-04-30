@@ -1,0 +1,6 @@
+{
+  "applicationDisplayName": "SAGE Outreach",
+  "applicationFolderName": "SAGE-Outreach",
+  "createdAt": "2026-04-30T15:58:38.015Z",
+  "note": "Used only for the optional final ForgeShell packaging step. Nothing is renamed during bootstrap."
+}
