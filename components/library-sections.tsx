@@ -24,49 +24,49 @@ const libraryPageConfig: Record<LibraryKey, { title: string; summary: string; to
     title: "Offers & Lead Magnets",
     summary: "Operational inventory of active offers, approvals, channels, and deployment suitability.",
     tone: "blue",
-    filters: ["Active", "Approved", "Needs Blue Approval", "Possible Idea", "Paused", "Retired", "All"],
+    filters: ["All", "Active", "Approved", "Needs Blue Approval", "Possible Idea", "Paused", "Retired"],
     columns: ["Name", "Type", "Status", "Approval owner", "Allowed channels", "Allowed audiences", "Last used", "Performance", "Action"],
   },
   email: {
     title: "Email Library",
     summary: "Source library for Bari-written, Bari-approved, imported, and agency-written examples.",
     tone: "purple",
-    filters: ["Gold", "Silver", "Bronze", "Rejected", "Needs Review", "All"],
+    filters: ["All", "Gold", "Silver", "Bronze", "Rejected", "Needs Review"],
     columns: ["Title / Subject", "Rating", "Source Type", "Associated Campaign", "Last Used", "Open"],
   },
   "voice-rules": {
     title: "Bari Voice Rules",
     summary: "Rule control list with blocking, warning, and guidance rules that shape founder voice output.",
     tone: "amber",
-    filters: ["Blocking", "Warning", "Guidance", "All"],
+    filters: ["All", "Blocking", "Warning", "Guidance"],
     columns: ["Rule", "Severity", "Status", "Summary"],
   },
   signoffs: {
     title: "Sign-off Library",
     summary: "Approved sign-off inventory with usage rules and automation permissions.",
     tone: "green",
-    filters: ["Active", "Inactive", "Requires Bari Review", "Auto-selectable", "All"],
+    filters: ["All", "Active", "Inactive", "Requires Bari Review", "Auto-selectable"],
     columns: ["Sign-off Text", "Allowed Contexts", "Status", "Agent Auto Choose", "Requires Bari Review", "Example Usage"],
   },
   audiences: {
     title: "Audience Library",
     summary: "Audience, tag, and performance inventory tied to offers and exclusions.",
     tone: "blue",
-    filters: ["Active", "Demo", "Manual", "Needs Review", "All"],
+    filters: ["All", "Active", "Demo", "Manual", "Needs Review"],
     columns: ["Audience", "Source", "Status", "Estimated Size", "Allowed Offers", "Exclusions", "Last Used", "Performance"],
   },
   compliance: {
     title: "Compliance Rules",
     summary: "Blocking, warning, and guidance rules for claims, channels, and approval ownership.",
     tone: "red",
-    filters: ["Blocking", "Warning", "Guidance", "Inactive", "All"],
+    filters: ["All", "Blocking", "Warning", "Guidance", "Inactive"],
     columns: ["Rule", "Severity", "Claim Type", "Status", "Channels", "Owner", "Examples"],
   },
   learning: {
     title: "Learning Library",
     summary: "Candidate and approved learning signals from edits, replies, performance, and evaluations.",
     tone: "purple",
-    filters: ["Candidate", "Approved", "Rejected", "Archived", "All"],
+    filters: ["All", "Candidate", "Approved", "Rejected", "Archived"],
     columns: ["Insight", "Source", "Confidence", "Status", "Applies To", "Last Used"],
   },
 };
@@ -607,7 +607,7 @@ function SelectedRecordPanel({ keyName, record }: { keyName: LibraryKey; record?
 function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
   const key = libraryKey;
   const config = libraryPageConfig[key] ?? libraryPageConfig.offers;
-  const [activeFilter, setActiveFilter] = useState(config.filters[config.filters.length - 1] ?? "All");
+  const [activeFilter, setActiveFilter] = useState(config.filters[0] ?? "All");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [demoNotice, setDemoNotice] = useState<string | null>(null);
 
