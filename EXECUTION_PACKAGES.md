@@ -69,22 +69,43 @@ Completed on 2026-04-30. Added Next.js 16 App Router foundation, TypeScript/Tail
 ---
 
 ## PKG-002 — Domain Models, Demo Data, and Convex Scaffold
-Status: draft
+Status: ready
 
 ### Purpose
 Define shared TypeScript domain models, Convex schema scaffold, seed/demo data, and data access helpers for campaigns, approvals, libraries, agents, integrations, responses, performance, learning, users/roles, and audit logs.
 
 ### Why now
-UI surfaces need coherent data contracts and PRD seed data (`PRD-019`, `PRD-024`).
+PKG-001 created the Next.js foundation. UI surfaces now need coherent data contracts and seeded demo content before campaign, review, library, agent, and integration pages become dynamic (`PRD-019`, `PRD-024`).
 
-### Scope
-To be expanded after PKG-001 establishes project structure and dependency choices.
+### Expanded scope
+- Add Convex dependency and `convex/schema.ts` covering PRD entity groups at a scaffold level.
+- Add shared TypeScript domain types for roles, statuses, campaigns, approvals, libraries, agents, integrations, response intelligence, performance, learning, and audit events.
+- Add deterministic seed/demo data for at least one campaign, Bari review item, Blue review item, internal approval, offer, lead magnet, Bari voice rules, sign-offs, email records, HelpDesk/response classification, agent roster, LangGraph nodes, integration statuses, performance snapshot, learning insight, users/roles, and audit events.
+- Add read-only data access helpers that pages can use without live Convex credentials.
+- Update the existing scaffold page to consume the shared demo data for dashboard metrics, workflow preview, and setup/integration messaging.
 
 ### Out of scope
-Live external API credentials and production data migration.
+- Live Convex deployment, generated Convex client bindings, or production migration.
+- Live Clerk user sync.
+- Live external API calls.
+- Mutating CRUD workflows; later packages will attach actions to these contracts.
+
+### Sensitive systems
+- Demo data only; no real customer data or secrets.
+- Convex schema must not encode token values.
 
 ### Required checks
-Build/type/lint checks from the scaffold.
+- `npm run lint`
+- `npm run build`
+
+### Regression checks
+- Existing route shell still compiles without live credentials.
+- Dashboard and route placeholders render from local demo helpers rather than ad-hoc inline data.
+
+### Completion evidence expectations
+- Schema/type/demo files exist and map to PRD data requirements.
+- Validation commands pass.
+- Package status updated and committed with a clean tree.
 
 ---
 
