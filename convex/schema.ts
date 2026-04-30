@@ -90,6 +90,7 @@ export default defineSchema({
   }).index("by_owner_status", ["owner", "status"]),
 
   libraryItems: defineTable({
+    recordId: v.string(),
     type: v.union(v.literal("offer"), v.literal("lead_magnet"), v.literal("email"), v.literal("voice_rule"), v.literal("signoff"), v.literal("audience"), v.literal("compliance_rule"), v.literal("learning")),
     name: v.string(),
     status: v.string(),
@@ -97,7 +98,9 @@ export default defineSchema({
     tags: v.array(v.string()),
     riskLevel: v.optional(riskLevel),
     payload: v.optional(v.any()),
-  }).index("by_type", ["type"]),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_type", ["type"]).index("by_record_id", ["recordId"]),
 
   agentConfigs: defineTable({
     agentId: v.string(),
@@ -228,12 +231,16 @@ export default defineSchema({
   }).index("by_campaign", ["campaignId"]),
 
   learningInsights: defineTable({
+    recordId: v.string(),
     source: v.string(),
     status: v.union(v.literal("candidate"), v.literal("approved"), v.literal("rejected"), v.literal("archived")),
     title: v.string(),
     summary: v.string(),
     confidence: v.number(),
-  }).index("by_status", ["status"]),
+    payload: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_status", ["status"]).index("by_record_id", ["recordId"]),
 
   auditLogs: defineTable({
     actor: v.string(),

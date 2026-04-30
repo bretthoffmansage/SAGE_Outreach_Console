@@ -9,6 +9,7 @@
  */
 
 import type * as agents from "../agents.js";
+import type * as library from "../library.js";
 import type * as todayTasks from "../todayTasks.js";
 
 import type {
@@ -19,6 +20,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   agents: typeof agents;
+  library: typeof library;
   todayTasks: typeof todayTasks;
 }>;
 

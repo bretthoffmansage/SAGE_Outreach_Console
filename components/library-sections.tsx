@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { api } from "@/convex/_generated/api";
+import { useMutation, useQuery } from "convex/react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, BookOpen, Filter, Search, Sparkles } from "lucide-react";
 import type { LearningInsight, LibraryItem } from "@/lib/domain";
-import { libraryItems, learningInsights } from "@/lib/data/demo-data";
 import { Button, ConsoleTable, ControlPanel, InlineAction, SectionHeader, StatusBadge, StatusDot, Td, Th, TableHead } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
@@ -169,7 +170,49 @@ function readLearningBoolean(insight: LearningInsight, key: string, fallback: bo
   return typeof value === "boolean" ? value : fallback;
 }
 
-function rowsFor(key: LibraryKey): InventoryRecord[] {
+function toLibraryItem(record: {
+  recordId: string;
+  type: LibraryItem["type"];
+  name: string;
+  status: string;
+  summary: string;
+  tags: string[];
+  riskLevel?: LibraryItem["riskLevel"];
+  payload?: Record<string, unknown>;
+}): LibraryItem {
+  return {
+    id: record.recordId,
+    type: record.type,
+    name: record.name,
+    status: record.status,
+    summary: record.summary,
+    tags: record.tags,
+    riskLevel: record.riskLevel,
+    payload: record.payload,
+  };
+}
+
+function toLearningInsight(record: {
+  recordId: string;
+  source: LearningInsight["source"];
+  status: LearningInsight["status"];
+  title: string;
+  summary: string;
+  confidence: number;
+  payload?: Record<string, unknown>;
+}): LearningInsight {
+  return {
+    id: record.recordId,
+    source: record.source,
+    status: record.status,
+    title: record.title,
+    summary: record.summary,
+    confidence: record.confidence,
+    payload: record.payload,
+  };
+}
+
+function rowsFor(key: LibraryKey, libraryItems: LibraryItem[], learningInsights: LearningInsight[]): InventoryRecord[] {
   if (key === "learning") {
     return learningInsights.map((insight) => ({
       id: insight.id,
@@ -610,8 +653,42 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
   const [activeFilter, setActiveFilter] = useState(config.filters[0] ?? "All");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [demoNotice, setDemoNotice] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [librarySeedAttempted, setLibrarySeedAttempted] = useState(false);
+  const [learningSeedAttempted, setLearningSeedAttempted] = useState(false);
+  const convexLibraryItems = useQuery(api.library.listLibraryItems);
+  const convexLearningInsights = useQuery(api.library.listLearningInsights);
+  const seedDefaultLibraryItemsIfEmpty = useMutation(api.library.seedDefaultLibraryItemsIfEmpty);
+  const seedDefaultLearningInsightsIfEmpty = useMutation(api.library.seedDefaultLearningInsightsIfEmpty);
 
-  const allRows = useMemo(() => rowsFor(key), [key]);
+  useEffect(() => {
+    if (key === "learning" || convexLibraryItems === undefined || convexLibraryItems.length > 0 || librarySeedAttempted) return;
+    setLibrarySeedAttempted(true);
+    void seedDefaultLibraryItemsIfEmpty().catch(() => {
+      setLoadError("Unable to load library records.");
+      setLibrarySeedAttempted(false);
+    });
+  }, [convexLibraryItems, key, librarySeedAttempted, seedDefaultLibraryItemsIfEmpty]);
+
+  useEffect(() => {
+    if (key !== "learning" || convexLearningInsights === undefined || convexLearningInsights.length > 0 || learningSeedAttempted) return;
+    setLearningSeedAttempted(true);
+    void seedDefaultLearningInsightsIfEmpty().catch(() => {
+      setLoadError("Unable to load library records.");
+      setLearningSeedAttempted(false);
+    });
+  }, [convexLearningInsights, key, learningSeedAttempted, seedDefaultLearningInsightsIfEmpty]);
+
+  const libraryRecords = useMemo(
+    () => (convexLibraryItems ?? []).map((record) => toLibraryItem(record as never)),
+    [convexLibraryItems],
+  );
+  const learningRecords = useMemo(
+    () => (convexLearningInsights ?? []).map((record) => toLearningInsight(record as never)),
+    [convexLearningInsights],
+  );
+
+  const allRows = useMemo(() => rowsFor(key, libraryRecords, learningRecords), [key, libraryRecords, learningRecords]);
   const filteredRows = useMemo(() => allRows.filter((row) => rowMatchesFilter(key, row, activeFilter)), [activeFilter, allRows, key]);
   const resolvedSelectedId = useMemo(() => {
     if (!filteredRows.length) return null;
@@ -628,7 +705,7 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
         description={config.summary}
         actions={
           <>
-            <button className="focus-ring" onClick={() => setDemoNotice("Demo: Add record flow is placeholder until Convex inventory writes are enabled.")} type="button">
+            <button className="focus-ring" onClick={() => setDemoNotice("Add record flow is not wired yet for the Library.")} type="button">
               <Button>
                 <BookOpen className="mr-2 h-4 w-4" />
                 Add record
@@ -649,6 +726,10 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
           </>
         }
       />
+
+      {loadError ? (
+        <ControlPanel className="border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-100">{loadError}</ControlPanel>
+      ) : null}
 
       {demoNotice ? (
         <ControlPanel className="border-sky-500/30 bg-sky-500/10 p-3 text-sm text-sky-100">{demoNotice}</ControlPanel>
@@ -738,7 +819,15 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
             </tr>
           </TableHead>
           <tbody>
-            {filteredRows.map((row) => {
+            {(key === "learning" ? convexLearningInsights === undefined : convexLibraryItems === undefined) ? (
+              <tr>
+                <td className="px-4 py-6 text-sm text-slate-300" colSpan={config.columns.length}>Loading library records.</td>
+              </tr>
+            ) : !filteredRows.length ? (
+              <tr>
+                <td className="px-4 py-6 text-sm text-slate-300" colSpan={config.columns.length}>No library records found.</td>
+              </tr>
+            ) : filteredRows.map((row) => {
               const isSelected = row.id === resolvedSelectedId;
               return (
                 <tr className={cn("cursor-pointer", isSelected ? "bg-slate-900/85" : "")} key={row.id} onClick={() => setSelectedId(row.id)}>
