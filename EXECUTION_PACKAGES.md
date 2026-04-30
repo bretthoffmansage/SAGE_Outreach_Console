@@ -351,7 +351,7 @@ Completed on 2026-04-30. Added response intelligence route with HelpDesk-style c
 ---
 
 ## PKG-009 — Settings, Roles, Audit Logs, and Admin Safety
-Status: draft
+Status: ready
 
 ### Purpose
 Implement settings/users/roles/agents/prompts views, audit logs, role-aware action affordances, and safe environment handling review.
@@ -359,8 +359,20 @@ Implement settings/users/roles/agents/prompts views, audit logs, role-aware acti
 ### PRD coverage
 `PRD-003`, `PRD-018`, `PRD-022`, `PRD-023`
 
-### Scope
-To be expanded after all primary modules expose actions and data.
+### Why now
+Primary modules expose data and action affordances. Admin safety, role visibility, and auditability should now be explicit before final UX polish.
+
+### Expanded scope
+- Implement `/settings` as an admin overview with users/roles, agents/prompts, integration safety, and audit log panels.
+- Display seeded users and roles, permission posture, audit events, and security/privacy reminders.
+- Provide role-aware and secret-safe messaging; no live Clerk or token mutation.
+
+### Out of scope
+- Persisted user/role mutation and live Clerk org management.
+
+### Required checks
+- `npm run lint`
+- `npm run build`
 
 ---
 
