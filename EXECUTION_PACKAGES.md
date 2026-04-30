@@ -277,7 +277,7 @@ Completed on 2026-04-30. Added agent roster and structured output views, plus a 
 ---
 
 ## PKG-007 — Integrations and Keap/Zapier Operations
-Status: ready
+Status: complete
 
 ### Purpose
 Implement integration settings/status, setup guidance, disconnected states, Keap sync/handoff shell, Zapier webhook shell, and manual export fallback.
@@ -302,6 +302,13 @@ Campaigns, approvals, and agent visibility now expose readiness signals. Operati
 
 ### Regression checks
 - Existing dashboard, campaign, review, library, and intelligence routes still compile.
+
+### Completion notes
+Completed on 2026-04-30. Added integration settings cards with purpose, status, required env keys, setup-safe test/sync affordances, and fallback messaging; added Keap/Zapier operations page with ready-for-Keap campaign handoff cards, send-prep checklist, manual export, and webhook shell affordances.
+
+### Validation evidence
+- `npm run lint` passed.
+- `npm run build` passed.
 
 ---
 
