@@ -3,16 +3,8 @@ import { ArrowRight, CheckCircle2, CircleDashed, ExternalLink, ShieldAlert, Spar
 import { AppShell } from "@/components/app-shell";
 import { Card, Pill, Button } from "@/components/ui";
 import { navGroups } from "@/lib/navigation";
+import { getDashboardMetrics, getIntegrationSummary, getLibraryCoverage, getWorkflowPreview } from "@/lib/data";
 import { titleFromSlug } from "@/lib/utils";
-
-const metrics = [
-  ["Active campaigns", "12", "blue"],
-  ["Needs Bari", "3", "amber"],
-  ["Needs Blue", "2", "red"],
-  ["Ready for Keap", "4", "green"],
-] as const;
-
-const workflow = ["Intake", "Strategist", "Audience", "Offer", "Copywriter", "Bari Voice", "Compliance", "Approval Router", "Keap Prep", "Learning"];
 
 const routeCopy: Record<string, { eyebrow: string; summary: string; actions: string[] }> = {
   dashboard: {
@@ -62,6 +54,10 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
   const title = titleFromSlug(slug);
   const section = sectionFor(slug);
   const isDashboard = !slug || slug[0] === "dashboard";
+  const metrics = getDashboardMetrics();
+  const workflow = getWorkflowPreview();
+  const integrationSummary = getIntegrationSummary();
+  const libraryCoverage = getLibraryCoverage();
 
   return (
     <AppShell title={title}>
@@ -91,10 +87,10 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
 
         {isDashboard && (
           <section className="grid gap-4 md:grid-cols-4">
-            {metrics.map(([label, value, tone]) => (
-              <Card key={label}>
-                <Pill tone={tone}>{label}</Pill>
-                <p className="mt-4 text-4xl font-bold text-[#172033]">{value}</p>
+            {metrics.map((metric) => (
+              <Card key={metric.label}>
+                <Pill tone={metric.tone}>{metric.label}</Pill>
+                <p className="mt-4 text-4xl font-bold text-[#172033]">{metric.value}</p>
                 <p className="mt-2 text-sm text-[#6f7685]">Seed demo signal for first-build review.</p>
               </Card>
             ))}
@@ -136,11 +132,11 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
               <Pill tone="purple">LangGraph ready</Pill>
             </div>
             <div className="mt-6 grid gap-3 md:grid-cols-2">
-              {workflow.map((node, index) => (
-                <div key={node} className="rounded-2xl border border-[#eadfce] bg-[#fffaf2] p-4">
+              {workflow.map((node) => (
+                <div key={node.label} className="rounded-2xl border border-[#eadfce] bg-[#fffaf2] p-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-bold text-[#172033]">{node}</span>
-                    {index < 6 ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <CircleDashed className="h-4 w-4 text-[#8a7357]" />}
+                    <span className="text-sm font-bold text-[#172033]">{node.label}</span>
+                    {node.status === "complete" ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <CircleDashed className="h-4 w-4 text-[#8a7357]" />}
                   </div>
                   <p className="mt-2 text-xs leading-5 text-[#6f7685]">Stores input snapshot, structured output, risk, confidence, and approval implications.</p>
                 </div>
@@ -156,8 +152,8 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
         <section className="grid gap-4 md:grid-cols-3">
           {[
             ["Clerk auth shell", "Role-aware navigation and production key placeholders.", "blue"],
-            ["Convex-ready data", "Campaign, approval, library, agent, integration, and audit entities planned.", "purple"],
-            ["Manual fallbacks", "Keap, Zapier, HelpDesk, and provider keys can be missing without breaking demo use.", "green"],
+            ["Convex-ready data", `${libraryCoverage.total} library records, ${libraryCoverage.blockingRules} blocking rules, and ${libraryCoverage.candidates} learning candidate are seeded.`, "purple"],
+            ["Manual fallbacks", `${integrationSummary.manualMode} integrations are in manual mode and ${integrationSummary.missingCredentials} await credentials without breaking demo use.`, "green"],
           ].map(([heading, body, tone]) => (
             <Card key={heading}>
               <Pill tone={tone}>{heading}</Pill>

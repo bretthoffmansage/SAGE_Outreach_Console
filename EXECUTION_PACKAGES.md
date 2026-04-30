@@ -69,7 +69,7 @@ Completed on 2026-04-30. Added Next.js 16 App Router foundation, TypeScript/Tail
 ---
 
 ## PKG-002 — Domain Models, Demo Data, and Convex Scaffold
-Status: ready
+Status: complete
 
 ### Purpose
 Define shared TypeScript domain models, Convex schema scaffold, seed/demo data, and data access helpers for campaigns, approvals, libraries, agents, integrations, responses, performance, learning, users/roles, and audit logs.
@@ -106,6 +106,13 @@ PKG-001 created the Next.js foundation. UI surfaces now need coherent data contr
 - Schema/type/demo files exist and map to PRD data requirements.
 - Validation commands pass.
 - Package status updated and committed with a clean tree.
+
+### Completion notes
+Completed on 2026-04-30. Added Convex dependency and schema scaffold, shared domain types, deterministic demo data for campaigns/approvals/libraries/agents/LangGraph/integrations/responses/performance/learning/users/audit events, read-only data helpers, and connected the dashboard scaffold to those helpers.
+
+### Validation evidence
+- `npm run lint` passed.
+- `npm run build` passed.
 
 ---
 

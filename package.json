@@ -12,6 +12,7 @@
     "@next/env": "latest",
     "@tailwindcss/postcss": "latest",
     "clsx": "latest",
+    "convex": "^1.36.1",
     "framer-motion": "latest",
     "lucide-react": "latest",
     "next": "latest",
