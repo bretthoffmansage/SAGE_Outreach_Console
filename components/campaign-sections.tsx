@@ -1,11 +1,13 @@
 "use client";
 
+import { api } from "@/convex/_generated/api";
+import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrainCircuit, MailCheck, Play, Send, Sparkles } from "lucide-react";
 import { approvals, campaigns, integrations, libraryItems, performanceSnapshots, responses, users } from "@/lib/data/demo-data";
-import type { Campaign } from "@/lib/domain";
+import type { Campaign, TodayTaskRecord } from "@/lib/domain";
 import {
   Button,
   Card,
@@ -167,98 +169,28 @@ function PipelineMap() {
 }
 
 export function DashboardSection() {
-  type TodayTask = {
-    id: string;
-    title: string;
-    context: string;
-    category: string;
-    priority: "green" | "amber" | "red" | "blue" | "gray";
-    sourceRoute: string;
-    sourceLabel: string;
-    createdAt: number;
-    completedAt?: number;
-    status: "current" | "completed";
-  };
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"current" | "history">("current");
-  const [tasks, setTasks] = useState<TodayTask[]>(() => {
-    const now = Date.now();
-    const firstResponse = responses[0];
-    const firstCampaign = campaigns[0];
-    const firstIntegrationIssue = integrations.find((integration) => integration.status === "manual_mode" || integration.status === "missing_credentials" || integration.status === "error");
-    return [
-      {
-        id: "task-bari-copy-review",
-        title: "Approve reactivation founder email",
-        context: "Cold Lead Reactivation — May Week 2",
-        category: "Bari Copy Review",
-        priority: "amber",
-        sourceRoute: "/reviews/bari",
-        sourceLabel: "Review / Bari Copy Review",
-        createdAt: now - 1000 * 60 * 70,
-        status: "current",
-      },
-      {
-        id: "task-blue-review",
-        title: "Review webinar promise and urgency language",
-        context: "SAGE Webinar Invitation — June",
-        category: "Blue Review",
-        priority: "red",
-        sourceRoute: "/reviews/blue",
-        sourceLabel: "Review / Blue Review",
-        createdAt: now - 1000 * 60 * 55,
-        status: "current",
-      },
-      {
-        id: "task-internal-approval",
-        title: "Confirm Keap handoff checklist",
-        context: firstCampaign?.name ?? "Founder Nurture Sequence Refresh",
-        category: "Internal Approval",
-        priority: "amber",
-        sourceRoute: "/reviews/internal",
-        sourceLabel: "Review / Internal Approvals",
-        createdAt: now - 1000 * 60 * 45,
-        status: "current",
-      },
-      {
-        id: "task-response-intelligence",
-        title: "Reply needed from interested lead",
-        context: firstResponse?.summary ?? "Lead is interested but unsure whether SAGE is beginner-friendly",
-        category: "Response Intelligence",
-        priority: "amber",
-        sourceRoute: "/intelligence/responses",
-        sourceLabel: "Intelligence / Response Intelligence",
-        createdAt: now - 1000 * 60 * 40,
-        status: "current",
-      },
-      {
-        id: "task-integrations",
-        title: "Configure missing credentials",
-        context: firstIntegrationIssue ? `${firstIntegrationIssue.name} is still in manual/demo mode.` : "Some integrations are still in manual/demo mode.",
-        category: "Integration",
-        priority: "amber",
-        sourceRoute: "/operations/integrations",
-        sourceLabel: "Operations / Integrations",
-        createdAt: now - 1000 * 60 * 30,
-        status: "current",
-      },
-      {
-        id: "task-campaign-export",
-        title: "Prepare manual Keap export",
-        context: firstCampaign?.name ?? "Founder Nurture Sequence Refresh",
-        category: "Campaign",
-        priority: "green",
-        sourceRoute: "/campaigns",
-        sourceLabel: "Control / Campaigns",
-        createdAt: now - 1000 * 60 * 20,
-        status: "current",
-      },
-    ];
-  });
   const [undoTaskId, setUndoTaskId] = useState<string | null>(null);
   const [undoVisible, setUndoVisible] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const seedAttemptedRef = useRef(false);
   const TASK_RETURN_KEY = "oc_task_return_context";
+  const todayTasks = useQuery(api.todayTasks.listTodayTasks);
+  const seedDefaultTodayTasksIfEmpty = useMutation(api.todayTasks.seedDefaultTodayTasksIfEmpty);
+  const completeTodayTask = useMutation(api.todayTasks.completeTodayTask);
+  const restoreTodayTask = useMutation(api.todayTasks.restoreTodayTask);
 
+  useEffect(() => {
+    if (todayTasks === undefined || seedAttemptedRef.current || todayTasks.length > 0) return;
+    seedAttemptedRef.current = true;
+    void seedDefaultTodayTasksIfEmpty().catch(() => {
+      setFeedback("Unable to update task. Check Convex connection.");
+      seedAttemptedRef.current = false;
+    });
+  }, [seedDefaultTodayTasksIfEmpty, todayTasks]);
+
+  const tasks = todayTasks ?? [];
   const currentTasks = tasks.filter((task) => task.status === "current");
   const historyTasks = tasks.filter((task) => task.status === "completed");
 
@@ -274,25 +206,37 @@ export function DashboardSection() {
   }, [undoTaskId]);
 
   const completeTask = (taskId: string) => {
-    setTasks((current) => current.map((task) => (
-      task.id === taskId
-        ? { ...task, status: "completed", completedAt: Date.now() }
-        : task
-    )));
-    setUndoTaskId(taskId);
-    setUndoVisible(true);
+    void completeTodayTask({ taskId })
+      .then((result) => {
+        if (!result.success) {
+          setFeedback("Unable to update task. Check Convex connection.");
+          return;
+        }
+        setFeedback(null);
+        setUndoTaskId(taskId);
+        setUndoVisible(true);
+      })
+      .catch(() => {
+        setFeedback("Unable to update task. Check Convex connection.");
+      });
   };
 
   const restoreTask = (taskId: string) => {
-    setTasks((current) => current.map((task) => (
-      task.id === taskId
-        ? { ...task, status: "current", completedAt: undefined }
-        : task
-    )));
-    if (undoTaskId === taskId) {
-      setUndoTaskId(null);
-      setUndoVisible(false);
-    }
+    void restoreTodayTask({ taskId })
+      .then((result) => {
+        if (!result.success) {
+          setFeedback("Unable to update task. Check Convex connection.");
+          return;
+        }
+        setFeedback(null);
+        if (undoTaskId === taskId) {
+          setUndoTaskId(null);
+          setUndoVisible(false);
+        }
+      })
+      .catch(() => {
+        setFeedback("Unable to update task. Check Convex connection.");
+      });
   };
 
   const undoLastComplete = () => {
@@ -300,23 +244,15 @@ export function DashboardSection() {
     restoreTask(undoTaskId);
   };
 
-  const destinationModeForRoute = (route: string): "campaign" | "review" | "library" | "intelligence" | "operations" => {
-    if (route.startsWith("/reviews")) return "review";
-    if (route.startsWith("/libraries")) return "library";
-    if (route.startsWith("/intelligence")) return "intelligence";
-    if (route.startsWith("/operations")) return "operations";
-    return "campaign";
-  };
-
-  const navigateFromTask = (task: TodayTask) => {
+  const navigateFromTask = (task: TodayTaskRecord) => {
     if (typeof window !== "undefined") {
       window.sessionStorage.setItem(
         TASK_RETURN_KEY,
         JSON.stringify({
           active: true,
           source: "today",
-          destinationMode: destinationModeForRoute(task.sourceRoute),
-          taskId: task.id,
+          destinationMode: task.destinationMode,
+          taskId: task.taskId,
           returnRoute: "/dashboard",
         }),
       );
@@ -324,7 +260,7 @@ export function DashboardSection() {
     router.push(task.sourceRoute);
   };
 
-  const priorityTone = (priority: TodayTask["priority"]) => {
+  const priorityTone = (priority: TodayTaskRecord["priority"]) => {
     if (priority === "red") return "red";
     if (priority === "amber") return "amber";
     if (priority === "green") return "green";
@@ -354,6 +290,12 @@ export function DashboardSection() {
       </div>
 
       <ControlPanel className="relative p-3">
+        {feedback ? (
+          <div className="mb-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+            {feedback}
+          </div>
+        ) : null}
+
         {undoTaskId ? (
           <div
             className={cn(
@@ -368,11 +310,19 @@ export function DashboardSection() {
         ) : null}
 
         <div className="max-h-[68vh] space-y-2 overflow-auto pr-1">
-          {activeTab === "current" ? (
+          {todayTasks === undefined ? (
+            <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/70 px-4 py-8 text-center text-sm text-slate-300">
+              Loading tasks from Convex.
+            </div>
+          ) : !tasks.length ? (
+            <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/70 px-4 py-8 text-center text-sm text-slate-300">
+              Seeding default tasks.
+            </div>
+          ) : activeTab === "current" ? (
             currentTasks.length ? currentTasks.map((task) => (
               <div
                 className="focus-ring flex w-full items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-3 text-left transition hover:border-slate-700 hover:bg-slate-900/80"
-                key={task.id}
+                key={task.taskId}
                 onClick={() => navigateFromTask(task)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
@@ -394,7 +344,7 @@ export function DashboardSection() {
                   className="focus-ring grid h-6 w-6 shrink-0 place-items-center rounded border border-slate-600 bg-slate-900 text-slate-300"
                   onClick={(event) => {
                     event.stopPropagation();
-                    completeTask(task.id);
+                    completeTask(task.taskId);
                   }}
                   type="button"
                 />
@@ -408,7 +358,7 @@ export function DashboardSection() {
             historyTasks.length ? historyTasks.map((task) => (
               <div
                 className="focus-ring flex w-full items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-3 text-left transition hover:border-slate-700 hover:bg-slate-900/80"
-                key={task.id}
+                key={task.taskId}
                 onClick={() => navigateFromTask(task)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
@@ -429,7 +379,7 @@ export function DashboardSection() {
                   className="focus-ring rounded-md border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-800"
                   onClick={(event) => {
                     event.stopPropagation();
-                    restoreTask(task.id);
+                    restoreTask(task.taskId);
                   }}
                   type="button"
                 >

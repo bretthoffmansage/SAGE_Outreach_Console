@@ -156,6 +156,26 @@ export type AgentRunRecord = {
   error?: string;
 };
 
+export type TodayTaskDestinationMode = "campaign" | "review" | "library" | "intelligence" | "operations";
+export type TodayTaskPriority = "green" | "amber" | "red" | "blue" | "gray";
+export type TodayTaskStatus = "current" | "completed";
+
+export type TodayTaskRecord = {
+  taskId: string;
+  title: string;
+  context: string;
+  category: string;
+  priority: TodayTaskPriority;
+  sourceRoute: string;
+  sourceLabel: string;
+  destinationMode: TodayTaskDestinationMode;
+  status: TodayTaskStatus;
+  createdAt: number;
+  completedAt?: number;
+  sortOrder: number;
+  updatedAt: number;
+};
+
 export type AgentRunStep = {
   id: string;
   agentId: string;

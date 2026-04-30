@@ -1,0 +1,125 @@
+import { v } from "convex/values";
+import { mutation, query } from "./_generated/server";
+import { buildDefaultTodayTasks } from "../lib/today-tasks";
+
+function stripSystemFields<T extends Record<string, unknown>>(record: T | null | undefined) {
+  if (!record) return {};
+  const rest = { ...(record as T & { _id?: unknown; _creationTime?: unknown }) };
+  delete rest._id;
+  delete rest._creationTime;
+  return rest;
+}
+
+function sanitizeTodayTaskForConvex(task: Record<string, unknown>) {
+  const next = {
+    taskId: task.taskId,
+    title: task.title,
+    context: task.context,
+    category: task.category,
+    priority: task.priority,
+    sourceRoute: task.sourceRoute,
+    sourceLabel: task.sourceLabel,
+    destinationMode: task.destinationMode,
+    status: task.status,
+    createdAt: task.createdAt,
+    completedAt: task.completedAt,
+    sortOrder: task.sortOrder,
+    updatedAt: task.updatedAt,
+  } satisfies Record<string, unknown>;
+
+  return Object.fromEntries(Object.entries(next).filter(([, value]) => value !== undefined));
+}
+
+function taskSort(
+  left: { status: "current" | "completed"; sortOrder: number; completedAt?: number; createdAt: number },
+  right: { status: "current" | "completed"; sortOrder: number; completedAt?: number; createdAt: number },
+) {
+  if (left.status !== right.status) {
+    return left.status === "current" ? -1 : 1;
+  }
+  if (left.status === "completed" && right.status === "completed") {
+    return (right.completedAt ?? 0) - (left.completedAt ?? 0);
+  }
+  return left.sortOrder - right.sortOrder || left.createdAt - right.createdAt;
+}
+
+export const listTodayTasks = query({
+  args: {},
+  handler: async (ctx) => {
+    const tasks = await ctx.db.query("todayTasks").collect();
+    return tasks.sort(taskSort);
+  },
+});
+
+export const listCurrentTodayTasks = query({
+  args: {},
+  handler: async (ctx) => {
+    const tasks = await ctx.db.query("todayTasks").withIndex("by_status", (q) => q.eq("status", "current")).collect();
+    return tasks.sort((left, right) => left.sortOrder - right.sortOrder || left.createdAt - right.createdAt);
+  },
+});
+
+export const listCompletedTodayTasks = query({
+  args: {},
+  handler: async (ctx) => {
+    const tasks = await ctx.db.query("todayTasks").withIndex("by_status", (q) => q.eq("status", "completed")).collect();
+    return tasks.sort((left, right) => (right.completedAt ?? 0) - (left.completedAt ?? 0));
+  },
+});
+
+export const seedDefaultTodayTasksIfEmpty = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const existingTasks = await ctx.db.query("todayTasks").collect();
+    if (existingTasks.length) {
+      return { seeded: false, inserted: 0 };
+    }
+
+    const defaults = buildDefaultTodayTasks();
+    for (const task of defaults) {
+      await ctx.db.insert("todayTasks", sanitizeTodayTaskForConvex(task) as any);
+    }
+
+    return { seeded: true, inserted: defaults.length };
+  },
+});
+
+export const completeTodayTask = mutation({
+  args: { taskId: v.string() },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.query("todayTasks").withIndex("by_task_id", (q) => q.eq("taskId", args.taskId)).unique();
+    if (!existing?._id) {
+      return { success: false as const, reason: "not_found" as const, taskId: args.taskId };
+    }
+
+    const now = Date.now();
+    const next = sanitizeTodayTaskForConvex({
+      ...stripSystemFields(existing),
+      status: "completed",
+      completedAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.replace(existing._id, next as any);
+    return { success: true as const, taskId: args.taskId, completedAt: now };
+  },
+});
+
+export const restoreTodayTask = mutation({
+  args: { taskId: v.string() },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.query("todayTasks").withIndex("by_task_id", (q) => q.eq("taskId", args.taskId)).unique();
+    if (!existing?._id) {
+      return { success: false as const, reason: "not_found" as const, taskId: args.taskId };
+    }
+
+    const now = Date.now();
+    const next = sanitizeTodayTaskForConvex({
+      ...stripSystemFields(existing),
+      status: "current",
+      completedAt: undefined,
+      updatedAt: now,
+    });
+    await ctx.db.replace(existing._id, next as any);
+    return { success: true as const, taskId: args.taskId };
+  },
+});

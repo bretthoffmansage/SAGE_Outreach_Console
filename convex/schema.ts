@@ -29,6 +29,15 @@ const campaignStatus = v.union(
   v.literal("learning_complete"),
   v.literal("archived"),
 );
+const todayTaskPriority = v.union(v.literal("green"), v.literal("amber"), v.literal("red"), v.literal("blue"), v.literal("gray"));
+const todayTaskStatus = v.union(v.literal("current"), v.literal("completed"));
+const todayTaskDestinationMode = v.union(
+  v.literal("campaign"),
+  v.literal("review"),
+  v.literal("library"),
+  v.literal("intelligence"),
+  v.literal("operations"),
+);
 
 export default defineSchema({
   users: defineTable({
@@ -52,6 +61,22 @@ export default defineSchema({
     nextAction: v.string(),
     updatedAt: v.number(),
   }).index("by_status", ["status"]),
+
+  todayTasks: defineTable({
+    taskId: v.string(),
+    title: v.string(),
+    context: v.string(),
+    category: v.string(),
+    priority: todayTaskPriority,
+    sourceRoute: v.string(),
+    sourceLabel: v.string(),
+    destinationMode: todayTaskDestinationMode,
+    status: todayTaskStatus,
+    createdAt: v.number(),
+    completedAt: v.optional(v.number()),
+    sortOrder: v.number(),
+    updatedAt: v.number(),
+  }).index("by_task_id", ["taskId"]).index("by_status", ["status"]).index("by_sort_order", ["sortOrder"]),
 
   approvalItems: defineTable({
     campaignId: v.id("campaigns"),
