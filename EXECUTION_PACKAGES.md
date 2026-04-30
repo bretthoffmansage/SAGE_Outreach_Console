@@ -351,7 +351,7 @@ Completed on 2026-04-30. Added response intelligence route with HelpDesk-style c
 ---
 
 ## PKG-009 — Settings, Roles, Audit Logs, and Admin Safety
-Status: ready
+Status: complete
 
 ### Purpose
 Implement settings/users/roles/agents/prompts views, audit logs, role-aware action affordances, and safe environment handling review.
@@ -373,6 +373,13 @@ Primary modules expose data and action affordances. Admin safety, role visibilit
 ### Required checks
 - `npm run lint`
 - `npm run build`
+
+### Completion notes
+Completed on 2026-04-30. Added admin settings surface for users/roles, agents/prompts, audit logs, security/privacy posture, and secret-safe integration environment visibility.
+
+### Validation evidence
+- `npm run lint` passed.
+- `npm run build` passed.
 
 ---
 

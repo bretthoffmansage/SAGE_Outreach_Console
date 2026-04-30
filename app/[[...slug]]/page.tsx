@@ -7,6 +7,7 @@ import { ReviewRouteSection } from "@/components/review-sections";
 import { LibraryRouteSection } from "@/components/library-sections";
 import { IntelligenceRouteSection } from "@/components/intelligence-sections";
 import { OperationsRouteSection } from "@/components/operations-sections";
+import { SettingsSection } from "@/components/settings-section";
 import { navGroups } from "@/lib/navigation";
 import { getDashboardMetrics, getIntegrationSummary, getLibraryCoverage, getWorkflowPreview } from "@/lib/data";
 import { titleFromSlug } from "@/lib/utils";
@@ -124,6 +125,16 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
       <AppShell title={title}>
         <div className="mx-auto max-w-7xl">
           <OperationsRouteSection slug={slug} />
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (slug[0] === "settings") {
+    return (
+      <AppShell title={title}>
+        <div className="mx-auto max-w-7xl">
+          <SettingsSection />
         </div>
       </AppShell>
     );
