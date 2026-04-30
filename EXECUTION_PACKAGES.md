@@ -199,7 +199,7 @@ Completed on 2026-04-30. Added route-specific Bari, Blue, internal, and all-appr
 ---
 
 ## PKG-005 — Source-of-Truth Libraries
-Status: draft
+Status: ready
 
 ### Purpose
 Implement offers/lead magnets, email/voice examples, Bari voice rules, sign-offs, audiences, compliance rules, and learning library basics.
@@ -207,8 +207,26 @@ Implement offers/lead magnets, email/voice examples, Bari voice rules, sign-offs
 ### PRD coverage
 `PRD-015`, `PRD-017`, `PRD-020`, `PRD-024`
 
-### Scope
-To be expanded after shared library models and core UI patterns exist.
+### Why now
+Campaign and approval surfaces now exist. Source-of-truth libraries must be visible before agent workflow and routing logic are expanded.
+
+### Expanded scope
+- Implement route-specific library views for `/libraries/offers`, `/libraries/email`, `/libraries/voice-rules`, `/libraries/signoffs`, `/libraries/audiences`, `/libraries/compliance`, and `/libraries/learning`.
+- Display seeded records with status, tags, risk, source-of-truth purpose, filtering/search affordances, and record cards.
+- Highlight SAGE capitalization as a blocking default terminology rule.
+- Show learning candidate review posture and approved/rejected/manual governance language.
+- Keep CRUD/edit persistence out of scope; provide UI affordances only.
+
+### Out of scope
+- Persisted create/edit/delete library records.
+- Agent retrieval implementation.
+
+### Required checks
+- `npm run lint`
+- `npm run build`
+
+### Regression checks
+- Existing dashboard, campaign, and review routes still compile.
 
 ---
 
