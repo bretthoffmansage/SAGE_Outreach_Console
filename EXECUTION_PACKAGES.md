@@ -117,7 +117,7 @@ Completed on 2026-04-30. Added Convex dependency and schema scaffold, shared dom
 ---
 
 ## PKG-003 — Dashboard and Campaign Lifecycle
-Status: ready
+Status: complete
 
 ### Purpose
 Implement dashboard, campaign list, campaign intake, campaign detail tabs, statuses, summary cards, next actions, approval state, and Keap readiness indicators.
@@ -147,6 +147,13 @@ PKG-002 added shared campaign, approval, integration, performance, and demo data
 ### Regression checks
 - Dashboard, `/campaigns`, `/campaigns/new`, and seeded campaign detail route compile without live credentials.
 - Existing navigation and generic route placeholders still compile.
+
+### Completion notes
+Completed on 2026-04-30. Added data-backed dashboard command cards and recent activity, campaign lifecycle list, guided campaign intake scaffold, and seeded campaign detail pages with overview, tabs, approvals/signals, Keap readiness, response/performance, agent-run, and learning placeholders.
+
+### Validation evidence
+- `npm run lint` passed.
+- `npm run build` passed.
 
 ---
 

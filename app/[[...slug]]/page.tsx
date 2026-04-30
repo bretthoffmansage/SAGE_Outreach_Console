@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, CheckCircle2, CircleDashed, ExternalLink, ShieldAlert, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Card, Pill, Button } from "@/components/ui";
+import { CampaignRouteSection, DashboardSection } from "@/components/campaign-sections";
 import { navGroups } from "@/lib/navigation";
 import { getDashboardMetrics, getIntegrationSummary, getLibraryCoverage, getWorkflowPreview } from "@/lib/data";
 import { titleFromSlug } from "@/lib/utils";
@@ -58,6 +59,31 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
   const workflow = getWorkflowPreview();
   const integrationSummary = getIntegrationSummary();
   const libraryCoverage = getLibraryCoverage();
+
+  if (!slug || slug[0] === "dashboard") {
+    return (
+      <AppShell title={title}>
+        <div className="mx-auto max-w-7xl space-y-8">
+          <section className="glass-panel overflow-hidden rounded-[2rem] p-6 md:p-8">
+            <Pill tone="purple">Command center</Pill>
+            <h2 className="mt-4 max-w-3xl text-3xl font-bold tracking-tight text-[#172033] md:text-5xl">Marketing command center with human approval built in.</h2>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-[#5f6676] md:text-lg">A focused operating view for approvals, ready-to-send work, response intelligence, integration health, and recent agent activity.</p>
+          </section>
+          <DashboardSection />
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (slug[0] === "campaigns") {
+    return (
+      <AppShell title={title}>
+        <div className="mx-auto max-w-7xl">
+          <CampaignRouteSection slug={slug} />
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell title={title}>
