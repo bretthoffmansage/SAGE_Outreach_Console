@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { type ReactNode, useDeferredValue, useEffect, useMemo, useState } from "react";
-import { SignIn, UserButton } from "@clerk/nextjs";
+import { SignIn, SignInButton, UserButton } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 import { usePathname, useRouter } from "next/navigation";
 import { Bell, ChevronRight, Menu, Plus, Search, Shield, X } from "lucide-react";
@@ -176,6 +176,7 @@ function ShellFrame({
   displayName,
   avatarInitials,
   clerkConfigured,
+  clerkSession,
 }: {
   children: ReactNode;
   pathname: string;
@@ -183,6 +184,8 @@ function ShellFrame({
   displayName: string;
   avatarInitials: string;
   clerkConfigured: boolean;
+  /** When Clerk is enabled, drives compact sign-in / UserButton in the top bar without calling useAuth when demo mode has no ClerkProvider. */
+  clerkSession: { isLoaded: boolean; isSignedIn: boolean } | null;
 }) {
   const router = useRouter();
   const allowedNavGroups = useMemo(() => filterNavGroupsForRole(navGroups, role), [role]);
@@ -322,6 +325,22 @@ function ShellFrame({
                   <SageTopBarLogo />
                 </div>
               </div>
+              <div className="flex items-center gap-2 md:hidden">
+                {clerkConfigured && clerkSession?.isLoaded ? (
+                  clerkSession.isSignedIn ? (
+                    <UserButton />
+                  ) : (
+                    <SignInButton mode="modal">
+                      <button
+                        type="button"
+                        className="focus-ring rounded-lg border border-slate-700 bg-slate-950/90 px-3 py-2 text-xs font-semibold text-slate-200"
+                      >
+                        Sign in
+                      </button>
+                    </SignInButton>
+                  )
+                ) : null}
+              </div>
               <div className="hidden items-center gap-2 md:flex">
                 <button
                   type="button"
@@ -430,7 +449,20 @@ function ShellFrame({
                     <p className="truncate text-sm font-semibold">{displayName}</p>
                     <p className="text-[0.68rem] uppercase tracking-[0.16em] text-slate-400">{roleLabel(role)}</p>
                   </div>
-                  {clerkConfigured ? <UserButton /> : null}
+                  {clerkConfigured && clerkSession?.isLoaded ? (
+                    clerkSession.isSignedIn ? (
+                      <UserButton />
+                    ) : (
+                      <SignInButton mode="modal">
+                        <button
+                          type="button"
+                          className="focus-ring rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-slate-200"
+                        >
+                          Sign in
+                        </button>
+                      </SignInButton>
+                    )
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -597,6 +629,7 @@ function ClerkShell({ children }: { children: ReactNode }) {
         displayName={user.displayName}
         avatarInitials={user.avatarInitials}
         clerkConfigured
+        clerkSession={{ isLoaded: user.isLoaded, isSignedIn: user.isSignedIn }}
       >
         {children}
       </ShellFrame>
@@ -631,6 +664,7 @@ export function AppShell({ children, title: _title }: { children: ReactNode; tit
         displayName={demoUser.displayName}
         avatarInitials={demoUser.avatarInitials}
         clerkConfigured={false}
+        clerkSession={null}
       >
         {children}
       </ShellFrame>
