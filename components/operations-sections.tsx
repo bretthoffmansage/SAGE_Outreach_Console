@@ -1,46 +1,69 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { ArrowLeft, ChevronRight, Download, KeyRound, Send, Settings2 } from "lucide-react";
-import { campaigns } from "@/lib/data/demo-data";
+import { api } from "@/convex/_generated/api";
+import type { Doc } from "@/convex/_generated/dataModel";
+import { useAppUser } from "@/components/auth/app-user-context";
 import { Button, ConsoleTable, ControlPanel, QueueLane, SectionHeader, SignalList, StatusBadge, StatusDot, Td, Th, TableHead } from "@/components/ui";
+
+type IntegrationRecord = Doc<"integrationConnections">;
+type CampaignRecord = Doc<"campaigns">;
+type KeapSyncJobRecord = Doc<"keapSyncJobs">;
 
 function tone(status: string) {
   if (status === "connected") return "green";
-  if (status === "manual_mode") return "blue";
+  if (status === "manual_mode" || status === "demo_fallback") return "blue";
   if (status === "missing_credentials") return "amber";
   if (status === "error") return "red";
   return "gray";
 }
 
-const integrationPanels = [
-  { id: "keap", name: "Keap", purpose: "CRM audience, tags, and campaign handoff layer.", status: "manual_mode", lastCheck: "Apr 30 12:45", envKeys: ["KEAP_CLIENT_ID", "KEAP_CLIENT_SECRET", "KEAP_ACCESS_TOKEN"], notes: "Manual/demo fallback", fallback: "Manual audience entry/export" },
-  { id: "helpdesk", name: "HelpDesk", purpose: "Response intake and reply intelligence.", status: "manual_mode", lastCheck: "Apr 30 12:43", envKeys: ["HELPDESK_CLIENT_ID", "HELPDESK_CLIENT_SECRET"], notes: "Manual/demo fallback", fallback: "Manual response import" },
-  { id: "zapier", name: "Zapier", purpose: "Webhook handoff for approvals and exports.", status: "manual_mode", lastCheck: "Apr 30 12:41", envKeys: ["ZAPIER_CAMPAIGN_APPROVED_WEBHOOK_URL"], notes: "Manual/demo fallback", fallback: "Copy/export handoff" },
-  { id: "clerk", name: "Clerk", purpose: "Auth and role shell.", status: "missing_credentials", lastCheck: "Apr 30 12:39", envKeys: ["NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "CLERK_SECRET_KEY"], notes: "Shell scaffold only", fallback: "Demo role shell" },
-  { id: "langgraph", name: "LangGraph", purpose: "Visual and runtime workflow orchestration.", status: "manual_mode", lastCheck: "Apr 30 12:36", envKeys: ["LANGGRAPH_API_KEY"], notes: "Visual/demo graph only", fallback: "Seeded workflow state" },
-  { id: "openai", name: "OpenAI", purpose: "Structured output and agent orchestration scaffold.", status: "missing_credentials", lastCheck: "Apr 30 12:31", envKeys: ["OPENAI_API_KEY"], notes: "Structured output scaffolding", fallback: "Simulated JSON outputs" },
-  { id: "claude", name: "Claude", purpose: "Copy model and Bari voice scaffold.", status: "missing_credentials", lastCheck: "Apr 30 12:30", envKeys: ["ANTHROPIC_API_KEY"], notes: "Copy model scaffold", fallback: "Manual/OpenAI fallback" },
-  { id: "convex", name: "Convex", purpose: "Realtime app data and demo persistence layer.", status: "missing_credentials", lastCheck: "Apr 30 12:28", envKeys: ["NEXT_PUBLIC_CONVEX_URL", "CONVEX_DEPLOYMENT"], notes: "Local demo data active", fallback: "Read-only demo data" },
-  { id: "vercel", name: "Vercel", purpose: "Deployment metadata and preview runtime.", status: "manual_mode", lastCheck: "Apr 30 12:26", envKeys: ["VERCEL_ENV"], notes: "Deployment metadata placeholder", fallback: "Local preview mode" },
-] as const;
-
 function formatStatus(status: string) {
   return status.replace(/_/g, " ");
 }
 
+function formatTimestamp(value?: number) {
+  if (!value) return "not checked";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(value);
+}
+
+function useSeedIntegrations(records: IntegrationRecord[] | undefined) {
+  const seedDefaults = useMutation(api.integrations.seedDefaultIntegrationRecordsIfEmpty);
+  const [seedAttempted, setSeedAttempted] = useState(false);
+  const [seedError, setSeedError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (records === undefined || records.length > 0 || seedAttempted) return;
+    setSeedAttempted(true);
+    void seedDefaults()
+      .then(() => setSeedError(null))
+      .catch(() => setSeedError("Unable to load integration records."));
+  }, [records, seedAttempted, seedDefaults]);
+
+  return seedError;
+}
+
 function IntegrationList({
+  integrations,
   onSelect,
 }: {
+  integrations: IntegrationRecord[];
   onSelect: (integrationId: string) => void;
 }) {
   return (
     <div className="space-y-2">
-      {integrationPanels.map((integration) => (
+      {integrations.map((integration) => (
         <button
-          key={integration.id}
+          key={integration.integrationId}
           type="button"
-          onClick={() => onSelect(integration.id)}
+          onClick={() => onSelect(integration.integrationId)}
           className="focus-ring block w-full rounded-xl border border-slate-800 bg-slate-950/75 px-4 py-3 text-left transition hover:border-slate-700 hover:bg-slate-900/90"
         >
           <div className="flex items-start justify-between gap-4">
@@ -48,11 +71,11 @@ function IntegrationList({
               <div className="flex items-center gap-3">
                 <StatusDot tone={tone(integration.status)} />
                 <p className="text-sm font-semibold text-slate-100">{integration.name}</p>
-                <StatusBadge tone={tone(integration.status)}>{formatStatus(integration.status)}</StatusBadge>
+                <StatusBadge tone={tone(integration.status)}>{integration.statusLabel || formatStatus(integration.status)}</StatusBadge>
               </div>
               <p className="mt-2 text-sm text-slate-300">{integration.purpose}</p>
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
-                <span>Last check: {integration.lastCheck}</span>
+                <span>Last check: {formatTimestamp(integration.lastCheckAt)}</span>
                 <span>{integration.envKeys.length} env vars</span>
                 <span>Fallback: {integration.fallback}</span>
               </div>
@@ -68,16 +91,31 @@ function IntegrationList({
 }
 
 function IntegrationDetail({
-  integrationId,
+  integration,
   onBack,
+  canManage,
 }: {
-  integrationId: string;
+  integration: IntegrationRecord;
   onBack: () => void;
+  canManage: boolean;
 }) {
-  const integration = integrationPanels.find((item) => item.id === integrationId);
+  const checkConnection = useAction(api.runtimePrep.checkIntegrationConnection);
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isChecking, setIsChecking] = useState(false);
 
-  if (!integration) return null;
+  async function handleCheckConnection() {
+    setIsChecking(true);
+    setError(null);
+    try {
+      const result = await checkConnection({ integrationId: integration.integrationId });
+      setMessage(result.result ?? "Connection check recorded.");
+    } catch {
+      setError("Unable to update integration. Check Convex connection.");
+    } finally {
+      setIsChecking(false);
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -88,15 +126,17 @@ function IntegrationDetail({
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => setMessage(`Manual/demo check complete for ${integration.name}.`)}
-            className="rounded-lg"
+            onClick={() => void handleCheckConnection()}
+            className="rounded-lg disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isChecking || !canManage}
           >
-            <Button variant="secondary">Check connection</Button>
+            <Button variant="secondary">{isChecking ? "Checking..." : "Check connection"}</Button>
           </button>
           <button
             type="button"
-            onClick={() => setMessage(`Setup instructions opened for ${integration.name}. Review required env vars and fallback notes below.`)}
+            onClick={() => setMessage(integration.setupInstructions || `Review required env vars and fallback notes for ${integration.name}.`)}
             className="rounded-lg"
+            disabled={!canManage}
           >
             <Button><Settings2 className="mr-2 h-4 w-4" /> Setup</Button>
           </button>
@@ -106,13 +146,19 @@ function IntegrationDetail({
       <SectionHeader
         eyebrow="Integration detail"
         title={integration.name}
-        description={integration.purpose}
-        actions={<StatusBadge tone={tone(integration.status)}>{formatStatus(integration.status)}</StatusBadge>}
+        description={integration.description || integration.purpose}
+        actions={<StatusBadge tone={tone(integration.status)}>{integration.statusLabel || formatStatus(integration.status)}</StatusBadge>}
       />
 
       {message ? (
         <ControlPanel className="p-4">
           <p className="text-sm text-slate-200">{message}</p>
+        </ControlPanel>
+      ) : null}
+
+      {error ? (
+        <ControlPanel className="border-rose-500/40 p-4">
+          <p className="text-sm text-rose-200">{error}</p>
         </ControlPanel>
       ) : null}
 
@@ -123,21 +169,30 @@ function IntegrationDetail({
             <p className="text-sm font-semibold">Required environment variables</p>
           </div>
           <div className="mt-4 grid gap-2">
-            {integration.envKeys.map((envKey) => (
-              <div key={envKey} className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3">
-                <p className="text-sm font-mono text-slate-100">{envKey}</p>
-              </div>
-            ))}
+            {integration.envKeys.map((envKey) => {
+              const configured = integration.configuredEnvVars?.includes(envKey);
+              const missing = integration.missingEnvVars?.includes(envKey);
+              return (
+                <div key={envKey} className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-mono text-slate-100">{envKey}</p>
+                    <StatusBadge tone={configured ? "green" : missing ? "amber" : "gray"}>
+                      {configured ? "detected" : missing ? "missing" : "unchecked"}
+                    </StatusBadge>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </ControlPanel>
 
         <div className="grid gap-4">
-          <QueueLane title="Connection status" count={formatStatus(integration.status)} tone={tone(integration.status)} subtitle={integration.notes}>
+          <QueueLane title="Connection status" count={integration.statusLabel || formatStatus(integration.status)} tone={tone(integration.status)} subtitle={integration.healthSummary || integration.setupNotes || integration.notes || integration.purpose}>
             <SignalList
               items={[
-                { label: "Last check", value: integration.lastCheck, tone: "blue", detail: "Most recent seeded health check." },
+                { label: "Last check", value: formatTimestamp(integration.lastCheckAt), tone: "blue", detail: integration.lastCheckResult || "No connection check recorded yet." },
                 { label: "Fallback behavior", value: integration.fallback, tone: "amber", detail: "Used when live credentials are unavailable." },
-                { label: "Setup mode", value: integration.notes, tone: tone(integration.status), detail: "Current setup state for this integration." },
+                { label: "Setup mode", value: integration.setupNotes || integration.statusLabel || formatStatus(integration.status), tone: tone(integration.status), detail: integration.notes || "Current setup state for this integration." },
               ]}
             />
           </QueueLane>
@@ -146,10 +201,10 @@ function IntegrationDetail({
             <p className="text-sm font-semibold text-slate-100">Setup instructions</p>
             <div className="mt-4 space-y-3 text-sm text-slate-300">
               <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3">
-                Add the required env vars for {integration.name}, then run a manual/demo connection check from this detail view.
+                {integration.setupInstructions || `Add the required env vars for ${integration.name}, then run a connection check from this detail view.`}
               </div>
               <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3">
-                Connection notes: {integration.notes}. Future live setup hooks can be added here without changing the Operations tab model.
+                Connection notes: {integration.notes || integration.setupNotes || "No additional setup notes recorded."}
               </div>
             </div>
           </ControlPanel>
@@ -160,28 +215,127 @@ function IntegrationDetail({
 }
 
 export function IntegrationsSection() {
+  const appUser = useAppUser();
+  const integrations = useQuery(api.integrations.listIntegrationRecords);
+  const overallHealth = useQuery(api.integrations.getOverallSystemHealth);
+  const seedError = useSeedIntegrations(integrations);
   const [selectedIntegrationId, setSelectedIntegrationId] = useState<string | null>(null);
+  const canManageIntegrations = appUser.role === "admin" || appUser.role === "operator";
+
+  const selectedIntegration = useMemo(
+    () => (integrations as IntegrationRecord[] | undefined)?.find((integration: IntegrationRecord) => integration.integrationId === selectedIntegrationId) ?? null,
+    [integrations, selectedIntegrationId],
+  );
+
+  useEffect(() => {
+    if (selectedIntegrationId && integrations && !(integrations as IntegrationRecord[]).some((integration: IntegrationRecord) => integration.integrationId === selectedIntegrationId)) {
+      setSelectedIntegrationId(null);
+    }
+  }, [integrations, selectedIntegrationId]);
+
+  if (integrations === undefined) {
+    return (
+      <div className="space-y-5">
+        <SectionHeader
+          eyebrow="System connections"
+          title="Integrations"
+          description="Compact connection inventory for CRM, reply intake, auth, models, workflow runtime, and deployment surfaces."
+        />
+        <ControlPanel className="p-4">
+          <p className="text-sm text-slate-300">Loading integration records...</p>
+        </ControlPanel>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
-      {!selectedIntegrationId ? (
+      {!selectedIntegration ? (
         <>
           <SectionHeader
             eyebrow="System connections"
             title="Integrations"
             description="Compact connection inventory for CRM, reply intake, auth, models, workflow runtime, and deployment surfaces."
+            actions={overallHealth ? <StatusBadge tone={overallHealth.status === "healthy" ? "green" : overallHealth.status === "warning" ? "amber" : "red"}>{`System ${overallHealth.status}`}</StatusBadge> : undefined}
           />
-          <IntegrationList onSelect={setSelectedIntegrationId} />
+          {seedError ? (
+            <ControlPanel className="border-rose-500/40 p-4">
+              <p className="text-sm text-rose-200">{seedError}</p>
+            </ControlPanel>
+          ) : null}
+          {integrations.length ? (
+            <IntegrationList integrations={integrations} onSelect={setSelectedIntegrationId} />
+          ) : (
+            <ControlPanel className="p-4">
+              <p className="text-sm text-slate-300">No integration records yet.</p>
+            </ControlPanel>
+          )}
         </>
       ) : (
-        <IntegrationDetail integrationId={selectedIntegrationId} onBack={() => setSelectedIntegrationId(null)} />
+        <IntegrationDetail integration={selectedIntegration} onBack={() => setSelectedIntegrationId(null)} canManage={canManageIntegrations} />
       )}
     </div>
   );
 }
 
 export function KeapOperationsSection() {
-  const ready = campaigns.filter((campaign) => campaign.status === "ready_for_keap");
+  const appUser = useAppUser();
+  const integrations = useQuery(api.integrations.listIntegrationRecords);
+  const campaigns = useQuery(api.campaigns.listCampaignRecords);
+  const jobs = useQuery(api.keapSync.listKeapSyncJobs);
+  const seedError = useSeedIntegrations(integrations);
+  const prepareKeapManualExport = useAction(api.runtimePrep.prepareKeapManualExport);
+  const queueKeapManualHandoff = useAction(api.runtimePrep.queueKeapManualHandoff);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [isQueueing, setIsQueueing] = useState(false);
+  const canManageIntegrations = appUser.role === "admin" || appUser.role === "operator";
+
+  const keapIntegration = (integrations as IntegrationRecord[] | undefined)?.find((integration: IntegrationRecord) => integration.integrationId === "keap") ?? null;
+  const readyCampaigns: CampaignRecord[] = useMemo(
+    () => ((campaigns ?? []) as CampaignRecord[]).filter((campaign: CampaignRecord) => campaign.status === "ready_for_keap"),
+    [campaigns],
+  );
+  const latestJobByCampaignId = useMemo(() => {
+    const map = new Map<string, KeapSyncJobRecord>();
+    for (const job of (jobs ?? []) as KeapSyncJobRecord[]) {
+      if (!job.campaignId) continue;
+      if (!map.has(job.campaignId)) {
+        map.set(job.campaignId, job);
+      }
+    }
+    return map;
+  }, [jobs]);
+
+  async function prepareReadyCampaignExports() {
+    if (!readyCampaigns.length) return;
+    setIsPreparing(true);
+    setError(null);
+    try {
+      await Promise.all(readyCampaigns.map((campaign) => prepareKeapManualExport({ campaignId: campaign.campaignId })));
+      setMessage("Manual export packages prepared.");
+    } catch {
+      setError("Unable to update integration. Check Convex connection.");
+    } finally {
+      setIsPreparing(false);
+    }
+  }
+
+  async function queueReadyCampaignHandoffs() {
+    if (!readyCampaigns.length) return;
+    setIsQueueing(true);
+    setError(null);
+    try {
+      await Promise.all(readyCampaigns.map((campaign) => queueKeapManualHandoff({ campaignId: campaign.campaignId })));
+      setMessage("Manual Keap handoff queue updated.");
+    } catch {
+      setError("Unable to update integration. Check Convex connection.");
+    } finally {
+      setIsQueueing(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <SectionHeader
@@ -190,19 +344,40 @@ export function KeapOperationsSection() {
         description="Sync and export control page for campaign handoff jobs, mappings, manual exports, and fallback operations."
         actions={
           <>
-            <Button><Download className="mr-2 h-4 w-4" /> Manual export</Button>
-            <Button variant="secondary"><Send className="mr-2 h-4 w-4" /> Queue handoff</Button>
+            <button className="rounded-lg disabled:cursor-not-allowed disabled:opacity-60" disabled={!canManageIntegrations || isPreparing || !readyCampaigns.length} onClick={() => void prepareReadyCampaignExports()} type="button">
+              <Button><Download className="mr-2 h-4 w-4" /> {isPreparing ? "Preparing..." : "Manual export"}</Button>
+            </button>
+            <button className="rounded-lg disabled:cursor-not-allowed disabled:opacity-60" disabled={!canManageIntegrations || isQueueing || !readyCampaigns.length} onClick={() => void queueReadyCampaignHandoffs()} type="button">
+              <Button variant="secondary"><Send className="mr-2 h-4 w-4" /> {isQueueing ? "Queueing..." : "Queue handoff"}</Button>
+            </button>
           </>
         }
       />
+      {message ? (
+        <ControlPanel className="p-4">
+          <p className="text-sm text-slate-200">{message}</p>
+        </ControlPanel>
+      ) : null}
+      {error ? (
+        <ControlPanel className="border-rose-500/40 p-4">
+          <p className="text-sm text-rose-200">{error}</p>
+        </ControlPanel>
+      ) : null}
+      {seedError ? (
+        <ControlPanel className="border-rose-500/40 p-4">
+          <p className="text-sm text-rose-200">{seedError}</p>
+        </ControlPanel>
+      ) : null}
       <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <ControlPanel className="p-4">
           <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
             <div>
               <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Connection + Jobs</p>
-              <p className="mt-1 text-sm text-slate-300">Keap remains in manual/demo fallback until credentials are configured.</p>
+              <p className="mt-1 text-sm text-slate-300">{keapIntegration?.healthSummary || keapIntegration?.fallback || "Loading Keap integration status..."}</p>
             </div>
-            <StatusBadge tone="blue">manual fallback</StatusBadge>
+            <StatusBadge tone={tone(keapIntegration?.status || "not_configured")}>
+              {keapIntegration?.statusLabel || (keapIntegration ? formatStatus(keapIntegration.status) : "loading")}
+            </StatusBadge>
           </div>
           <ConsoleTable className="mt-4">
             <TableHead>
@@ -215,26 +390,36 @@ export function KeapOperationsSection() {
               </tr>
             </TableHead>
             <tbody>
-              {ready.map((campaign) => (
-                <tr key={campaign.id}>
-                  <Td>{campaign.name}</Td>
-                  <Td><StatusBadge tone="green">ready for handoff</StatusBadge></Td>
-                  <Td>demo tag mapping</Td>
-                  <Td>manual export package</Td>
-                  <Td>none</Td>
+              {campaigns === undefined ? (
+                <tr>
+                  <td className="border-t border-slate-800 px-4 py-3 align-top text-slate-200" colSpan={5}>Loading Keap handoff candidates...</td>
                 </tr>
-              ))}
+              ) : readyCampaigns.length ? (
+                readyCampaigns.map((campaign: CampaignRecord) => (
+                  <tr key={campaign.campaignId}>
+                    <Td>{campaign.name}</Td>
+                    <Td><StatusBadge tone="green">ready for handoff</StatusBadge></Td>
+                    <Td>{campaign.keapTagMapping || "pending tag mapping"}</Td>
+                    <Td>{latestJobByCampaignId.get(campaign.campaignId)?.status?.replace(/_/g, " ") || "not prepared"}</Td>
+                    <Td>{latestJobByCampaignId.get(campaign.campaignId)?.error || "none"}</Td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="border-t border-slate-800 px-4 py-3 align-top text-slate-200" colSpan={5}>No campaigns are currently ready for Keap handoff.</td>
+                </tr>
+              )}
             </tbody>
           </ConsoleTable>
         </ControlPanel>
-        <QueueLane title="Readiness + Controls" count={ready.length} tone="green" subtitle="Campaigns ready for Keap or manual handoff.">
+        <QueueLane title="Readiness + Controls" count={readyCampaigns.length} tone={keapIntegration?.status === "connected" ? "green" : "blue"} subtitle="Campaigns ready for Keap or manual handoff.">
           <SignalList
             items={[
-              { label: "Connection status", value: "manual/demo", tone: "blue" },
-              { label: "Last sync", value: "not configured", tone: "amber" },
-              { label: "Available tag mappings", value: "demo set", tone: "green" },
-              { label: "Pending exports", value: ready.length, tone: "amber" },
-              { label: "Errors", value: 0, tone: "green" },
+              { label: "Connection status", value: keapIntegration?.statusLabel || "loading", tone: tone(keapIntegration?.status || "not_configured") },
+              { label: "Last sync", value: formatTimestamp(keapIntegration?.lastSync), tone: keapIntegration?.lastSync ? "green" : "amber" },
+              { label: "Available tag mappings", value: readyCampaigns.filter((campaign) => Boolean(campaign.keapTagMapping)).length, tone: "green" },
+              { label: "Pending exports", value: ((jobs ?? []) as KeapSyncJobRecord[]).filter((job: KeapSyncJobRecord) => job.status === "draft" || job.status === "ready_for_manual_export").length, tone: "amber" },
+              { label: "Errors", value: keapIntegration?.status === "error" ? 1 : 0, tone: keapIntegration?.status === "error" ? "red" : "green" },
             ]}
           />
         </QueueLane>

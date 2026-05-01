@@ -6,15 +6,15 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrainCircuit, MailCheck, Play, Send, Sparkles } from "lucide-react";
-import { approvals, campaigns, integrations, libraryItems, performanceSnapshots, responses, users } from "@/lib/data/demo-data";
+import { performanceSnapshots } from "@/lib/data/demo-data";
 import type { Campaign, TodayTaskRecord } from "@/lib/domain";
+import { useAppUser } from "@/components/auth/app-user-context";
 import {
   Button,
   Card,
   ConsoleTable,
   ControlPanel,
   InlineAction,
-  PipelineStage,
   Pill,
   QueueLane,
   ReadinessChecklist,
@@ -29,47 +29,6 @@ import { cn } from "@/lib/utils";
 
 const filters = ["All", "Needs Bari", "Needs Blue", "Ready for Keap", "Sent", "Learning", "Blocked"];
 
-const pipelineOrder = [
-  { label: "Intake", key: "intake_draft", tone: "gray", href: "/campaigns" },
-  { label: "Strategy", key: "agent_drafting", tone: "blue", href: "/campaigns" },
-  { label: "Copy", key: "agent_drafting", tone: "blue", href: "/campaigns" },
-  { label: "Bari Review", key: "needs_bari_review", tone: "amber", href: "/reviews/bari" },
-  { label: "Blue Review", key: "needs_blue_review", tone: "red", href: "/reviews/blue" },
-  { label: "Internal Approval", key: "needs_internal_review", tone: "green", href: "/reviews/internal" },
-  { label: "Keap Prep", key: "ready_for_keap", tone: "green", href: "/operations/keap" },
-  { label: "Sent", key: "sent", tone: "blue", href: "/intelligence/performance" },
-  { label: "Responses", key: "reporting", tone: "purple", href: "/intelligence/responses" },
-  { label: "Learning", key: "learning_complete", tone: "purple", href: "/libraries/learning" },
-];
-
-const responseSignals = [
-  { label: "Needs Reply", value: 1, tone: "amber", detail: "Manual reply drafts pending." },
-  { label: "Hot Leads", value: 1, tone: "green", detail: "Positive intent with follow-up questions." },
-  { label: "Questions", value: 1, tone: "blue", detail: "Need product or audience clarification." },
-  { label: "Objections", value: 0, tone: "red", detail: "No objections in seeded data." },
-  { label: "Complaints", value: 0, tone: "red", detail: "No complaint signals in current sync." },
-  { label: "Unsubscribes", value: 0, tone: "gray", detail: "No unsubscribe alerts." },
-  { label: "Testimonials", value: 0, tone: "purple", detail: "No testimonial captures yet." },
-  { label: "Unmatched", value: 0, tone: "gray", detail: "All demo responses are matched." },
-];
-
-const agentRack = [
-  { label: "Strategist", state: "ready", tone: "green", meta: "Campaign angle and objective." },
-  { label: "Audience Agent", state: "ready", tone: "green", meta: "Segment and exclusions." },
-  { label: "Offer Agent", state: "ready", tone: "green", meta: "Offer and claim selection." },
-  { label: "Copywriter", state: "running", tone: "blue", meta: "Drafting subject and body copy." },
-  { label: "Bari Voice Agent", state: "waiting", tone: "amber", meta: "Founder voice approval path." },
-  { label: "Brand Rules Checker", state: "ready", tone: "green", meta: "Terminology and capitalization." },
-  { label: "Compliance Guard", state: "blocked", tone: "red", meta: "High-risk claims need review." },
-  { label: "Skeptic", state: "ready", tone: "purple", meta: "Stress test positioning logic." },
-  { label: "Performance Agent", state: "idle", tone: "gray", meta: "Telemetry and signal review." },
-  { label: "Approval Router", state: "ready", tone: "green", meta: "Routes Bari, Blue, internal." },
-  { label: "Response Classifier", state: "ready", tone: "blue", meta: "Incoming reply sorting." },
-  { label: "Bari Learning Agent", state: "idle", tone: "amber", meta: "Captures edit patterns." },
-  { label: "Performance Reporter", state: "idle", tone: "purple", meta: "Outputs campaign telemetry." },
-  { label: "Learning Agent", state: "idle", tone: "purple", meta: "Approves reusable learnings." },
-];
-
 function formatLabel(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -81,6 +40,7 @@ function riskTone(risk: string) {
 }
 
 function stageForCampaign(campaign: Campaign) {
+  if (campaign.stage) return campaign.stage;
   const stages: Record<string, string> = {
     intake_draft: "Intake",
     agent_drafting: "Copy",
@@ -99,11 +59,11 @@ function stageForCampaign(campaign: Campaign) {
 }
 
 function ownerName(campaign: Campaign) {
-  return users.find((user) => user.id === campaign.ownerId)?.name ?? "Unassigned";
+  return campaign.ownerName ?? "Unassigned";
 }
 
 function offerName(campaign: Campaign) {
-  return libraryItems.find((item) => item.id === campaign.offerId)?.name ?? "No offer selected";
+  return campaign.offer || "No offer selected";
 }
 
 function pendingApprovals(campaign: Campaign) {
@@ -121,16 +81,8 @@ function campaignMatchesFilter(campaign: Campaign, filter: string) {
   return true;
 }
 
-function queueSummary(owner: "bari" | "blue" | "internal" | "all") {
-  const items = owner === "all" ? approvals : approvals.filter((approval) => approval.owner === owner);
-  const pending = items.filter((approval) => approval.status === "pending");
-  const topItem = pending[0];
-  const highestRisk = pending.some((approval) => approval.riskLevel === "red") ? "red" : pending.some((approval) => approval.riskLevel === "yellow") ? "amber" : "green";
-  return { pending, topItem, highestRisk };
-}
-
 function lastActivityForCampaign(campaign: Campaign) {
-  return new Date(campaign.updatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return new Date(campaign.lastActivityAt ?? campaign.updatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 function formatTimestamp(value?: number) {
@@ -143,29 +95,96 @@ function formatTimestamp(value?: number) {
   }).format(new Date(value));
 }
 
-function PipelineMap() {
-  return (
-    <ControlPanel className="p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Campaign Pipeline</p>
-          <p className="mt-1 text-sm text-slate-300">Intake to learning with live queue states.</p>
-        </div>
-        <StatusBadge tone="blue">{campaigns.length} active</StatusBadge>
-      </div>
-      <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
-        {pipelineOrder.map((stage) => {
-          const count = campaigns.filter((campaign) => campaign.status === stage.key).length;
-          const warning = stage.label === "Blue Review" && count ? "High-risk claims waiting" : stage.label === "Bari Review" && count ? "Founder voice pending" : count ? "Work in queue" : "No blocked items";
-          return (
-            <Link href={stage.href} key={stage.label}>
-              <PipelineStage title={stage.label} count={count} tone={stage.tone} warning={warning} />
-            </Link>
-          );
-        })}
-      </div>
-    </ControlPanel>
-  );
+function toCampaign(record: {
+  campaignId: string;
+  name: string;
+  type: string;
+  goal: string;
+  channels: string[];
+  audience: string;
+  audienceId?: string;
+  offer: string;
+  offerId?: string;
+  primaryCta?: string;
+  sendWindow?: string;
+  successMetric?: string;
+  allowedClaims: string[];
+  knownExclusions: string[];
+  sourceMapping?: string;
+  keapTagMapping?: string;
+  ownerId?: string;
+  ownerName: string;
+  stage: string;
+  status: Campaign["status"];
+  riskLevel: Campaign["riskLevel"];
+  pendingApprovals: Campaign["pendingApprovals"];
+  bariApprovalRequired: boolean;
+  blueApprovalRequired: boolean;
+  internalApprovalRequired: boolean;
+  bariApprovalStatus?: Campaign["bariApprovalStatus"];
+  blueApprovalStatus?: Campaign["blueApprovalStatus"];
+  internalApprovalStatus?: Campaign["internalApprovalStatus"];
+  copyStatus?: string;
+  keapPrepStatus?: string;
+  responseStatus?: string;
+  learningStatus?: string;
+  nextAction: string;
+  createdAt: number;
+  updatedAt: number;
+  lastActivityAt?: number;
+  sortOrder: number;
+  archived?: boolean;
+  notes?: string;
+}): Campaign {
+  return {
+    id: record.campaignId,
+    name: record.name,
+    type: record.type,
+    goal: record.goal,
+    channels: record.channels,
+    audience: record.audience,
+    audienceId: record.audienceId,
+    offer: record.offer,
+    offerId: record.offerId,
+    primaryCta: record.primaryCta,
+    sendWindow: record.sendWindow,
+    successMetric: record.successMetric,
+    allowedClaims: record.allowedClaims,
+    knownExclusions: record.knownExclusions,
+    sourceMapping: record.sourceMapping,
+    keapTagMapping: record.keapTagMapping,
+    ownerId: record.ownerId,
+    ownerName: record.ownerName,
+    stage: record.stage,
+    status: record.status,
+    riskLevel: record.riskLevel,
+    pendingApprovals: record.pendingApprovals,
+    bariApprovalRequired: record.bariApprovalRequired,
+    blueApprovalRequired: record.blueApprovalRequired,
+    internalApprovalRequired: record.internalApprovalRequired,
+    bariApprovalStatus: record.bariApprovalStatus,
+    blueApprovalStatus: record.blueApprovalStatus,
+    internalApprovalStatus: record.internalApprovalStatus,
+    copyStatus: record.copyStatus,
+    keapPrepStatus: record.keapPrepStatus,
+    responseStatus: record.responseStatus,
+    learningStatus: record.learningStatus,
+    nextAction: record.nextAction,
+    createdAt: new Date(record.createdAt).toISOString(),
+    updatedAt: new Date(record.updatedAt).toISOString(),
+    lastActivityAt: record.lastActivityAt ? new Date(record.lastActivityAt).toISOString() : new Date(record.updatedAt).toISOString(),
+    sortOrder: record.sortOrder,
+    archived: record.archived,
+    notes: record.notes,
+  };
+}
+
+function createCampaignId() {
+  return `camp_${Date.now()}`;
+}
+
+function splitLines(value: string) {
+  return value.split("\n").map((line) => line.trim()).filter(Boolean);
 }
 
 export function DashboardSection() {
@@ -190,7 +209,7 @@ export function DashboardSection() {
     });
   }, [seedDefaultTodayTasksIfEmpty, todayTasks]);
 
-  const tasks = todayTasks ?? [];
+  const tasks: TodayTaskRecord[] = (todayTasks ?? []) as TodayTaskRecord[];
   const currentTasks = tasks.filter((task) => task.status === "current");
   const historyTasks = tasks.filter((task) => task.status === "completed");
 
@@ -400,11 +419,23 @@ export function DashboardSection() {
 
 export function CampaignListSection() {
   const [activeFilter, setActiveFilter] = useState("All");
-  const [selectedId, setSelectedId] = useState<string | null>(campaigns[0]?.id ?? null);
-  const filteredCampaigns = useMemo(
-    () => campaigns.filter((campaign) => campaignMatchesFilter(campaign, activeFilter)),
-    [activeFilter],
-  );
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [seedAttempted, setSeedAttempted] = useState(false);
+  const campaignRecords = useQuery(api.campaigns.listCampaignRecords);
+  const seedDefaultCampaignRecordsIfEmpty = useMutation(api.campaigns.seedDefaultCampaignRecordsIfEmpty);
+
+  useEffect(() => {
+    if (campaignRecords === undefined || campaignRecords.length > 0 || seedAttempted) return;
+    setSeedAttempted(true);
+    void seedDefaultCampaignRecordsIfEmpty().catch(() => {
+      setFeedback("Unable to save campaign. Check Convex connection.");
+      setSeedAttempted(false);
+    });
+  }, [campaignRecords, seedAttempted, seedDefaultCampaignRecordsIfEmpty]);
+
+  const campaigns: Campaign[] = useMemo(() => (campaignRecords ?? []).map((record: Parameters<typeof toCampaign>[0]) => toCampaign(record)), [campaignRecords]);
+  const filteredCampaigns: Campaign[] = useMemo(() => campaigns.filter((campaign) => campaignMatchesFilter(campaign, activeFilter)), [activeFilter, campaigns]);
   const selectedCampaign = filteredCampaigns.find((campaign) => campaign.id === selectedId) ?? filteredCampaigns[0];
   const summaryStrip = [
     { label: "Active", value: campaigns.filter((campaign) => campaign.status !== "archived").length, tone: "blue" },
@@ -424,6 +455,7 @@ export function CampaignListSection() {
       />
 
       <ControlPanel className="p-4">
+        {feedback ? <div className="mb-4 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">{feedback}</div> : null}
         <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
           {summaryStrip.map((item) => (
             <span className="inline-flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-1.5 text-xs text-slate-200" key={item.label}>
@@ -456,7 +488,15 @@ export function CampaignListSection() {
               </tr>
             </TableHead>
             <tbody>
-              {filteredCampaigns.map((campaign) => (
+              {campaignRecords === undefined ? (
+                <tr>
+                  <td className="px-4 py-6 text-sm text-slate-300" colSpan={9}>Loading campaigns from Convex.</td>
+                </tr>
+              ) : !filteredCampaigns.length ? (
+                <tr>
+                  <td className="px-4 py-6 text-sm text-slate-300" colSpan={9}>No campaigns found.</td>
+                </tr>
+              ) : filteredCampaigns.map((campaign) => (
                 <tr className={selectedCampaign?.id === campaign.id ? "bg-slate-900/85" : ""} key={campaign.id} onClick={() => setSelectedId(campaign.id)}>
                   <Td>
                     <div>
@@ -464,7 +504,7 @@ export function CampaignListSection() {
                       <p className="mt-1 text-xs text-slate-400">{formatLabel(campaign.status)}</p>
                     </div>
                   </Td>
-                  <Td>{campaign.goal}</Td>
+                  <Td>{campaign.type}</Td>
                   <Td>{campaign.audience}</Td>
                   <Td>{offerName(campaign)}</Td>
                   <Td>{stageForCampaign(campaign)}</Td>
@@ -485,7 +525,7 @@ export function CampaignListSection() {
               <div className="space-y-3 text-sm">
                 <p className="text-sm font-semibold text-slate-100">Selected campaign</p>
                 <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-300">Campaign name: <span className="text-slate-100">{selectedCampaign.name}</span></div>
-                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-300">Campaign type: <span className="text-slate-100">{selectedCampaign.goal}</span></div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-300">Campaign type: <span className="text-slate-100">{selectedCampaign.type}</span></div>
                 <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-300">Current stage: <span className="text-slate-100">{stageForCampaign(selectedCampaign)}</span></div>
                 <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-300">Risk: <span className="text-slate-100">{selectedCampaign.riskLevel}</span></div>
                 <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-300">Owner: <span className="text-slate-100">{ownerName(selectedCampaign)}</span></div>
@@ -513,40 +553,158 @@ export function CampaignListSection() {
 }
 
 export function CampaignIntakeSection() {
+  const appUser = useAppUser();
+  const router = useRouter();
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    campaignName: "",
+    campaignGoal: "",
+    campaignType: "",
+    audienceSegment: "",
+    exclusions: "",
+    sourceMapping: "",
+    offerSelection: "",
+    promiseCta: "",
+    allowedClaims: "",
+    sendWindow: "",
+    successMetric: "",
+    primaryCta: "",
+  });
+  const libraryRecords = useQuery(api.library.listLibraryItems);
+  const createCampaignRecord = useMutation(api.campaigns.createCampaignRecord);
+  const actorName = appUser.displayName || appUser.clerkUserId || "console_operator";
+  const actorId = appUser.clerkUserId || "user_operator";
+
+  const bariApprovalRequired = useMemo(() => {
+    const source = `${form.campaignName} ${form.campaignGoal} ${form.campaignType} ${form.offerSelection}`.toLowerCase();
+    return source.includes("founder") || source.includes("reactivation") || source.includes("bari");
+  }, [form]);
+  const blueApprovalRequired = useMemo(() => {
+    const source = `${form.campaignName} ${form.campaignGoal} ${form.campaignType} ${form.promiseCta} ${form.allowedClaims}`.toLowerCase();
+    return source.includes("webinar") || source.includes("guarantee") || source.includes("urgency") || source.includes("claim");
+  }, [form]);
+  const keapMappingReady = form.sourceMapping.trim().length > 0;
   const checklist = [
-    { label: "Goal defined", complete: true, tone: "green" },
-    { label: "Audience selected", complete: true, tone: "green" },
-    { label: "Offer selected", complete: true, tone: "green" },
-    { label: "CTA selected", complete: false, detail: "Awaiting operator choice." },
-    { label: "Approval rules known", complete: true, tone: "amber", detail: "Bari and Blue rules inferred from seeded data." },
-    { label: "Bari voice required?", complete: true, tone: "amber", detail: "Triggered for founder-signed copy." },
-    { label: "Blue approval likely?", complete: true, tone: "red", detail: "Required for high-risk claim language." },
-    { label: "Keap mapping ready?", complete: false, detail: "Manual/demo" },
+    { label: "Goal defined", complete: Boolean(form.campaignGoal.trim()), tone: "green" },
+    { label: "Audience selected", complete: Boolean(form.audienceSegment.trim()), tone: "green" },
+    { label: "Offer selected", complete: Boolean(form.offerSelection.trim()), tone: "green" },
+    { label: "CTA selected", complete: Boolean(form.primaryCta.trim()), detail: form.primaryCta.trim() ? undefined : "Awaiting operator choice." },
+    { label: "Approval rules known", complete: Boolean(form.offerSelection.trim() || form.allowedClaims.trim()), tone: "amber", detail: "Bari and Blue rules inferred from the current intake." },
+    { label: "Bari voice required?", complete: bariApprovalRequired, tone: "amber", detail: bariApprovalRequired ? "Triggered for founder-signed or reactivation copy." : "Not currently required." },
+    { label: "Blue approval likely?", complete: blueApprovalRequired, tone: "red", detail: blueApprovalRequired ? "Likely due to strategic claim or urgency language." : "Not currently required." },
+    { label: "Keap mapping ready?", complete: keapMappingReady, detail: keapMappingReady ? undefined : "Add source mapping or tag details." },
+  ];
+  const intakeSections: Array<{
+    heading: string;
+    helper: string;
+    items: Array<{ label: string; placeholder: string; field: keyof typeof form; multiline?: boolean }>;
+  }> = [
+    {
+      heading: "Campaign intent",
+      helper: "Define what this campaign is trying to accomplish.",
+      items: [
+        { label: "Campaign name", placeholder: "Example: Cold Lead Reactivation — May Week 2", field: "campaignName" },
+        { label: "Campaign goal", placeholder: "Example: Reactivate dormant warm leads", field: "campaignGoal" },
+        { label: "Campaign type", placeholder: "Example: Reactivation, nurture, event invite", field: "campaignType" },
+      ],
+    },
+    {
+      heading: "Audience",
+      helper: "Choose who this campaign is for and who should be excluded.",
+      items: [
+        { label: "Audience / segment", placeholder: "Example: Dormant warm leads", field: "audienceSegment" },
+        { label: "Allowed exclusions", placeholder: "One exclusion per line", field: "exclusions", multiline: true },
+        { label: "Source mapping", placeholder: "Example: Keap tag or manual audience", field: "sourceMapping" },
+      ],
+    },
+    {
+      heading: "Offer / lead magnet",
+      helper: "Select what the audience is being offered and what claims are allowed.",
+      items: [
+        { label: "Offer selection", placeholder: "Example: Free SAGE Strategy Call", field: "offerSelection" },
+        { label: "Promise / CTA", placeholder: "Example: Book your call", field: "promiseCta" },
+        { label: "Allowed claims", placeholder: "One approved claim per line", field: "allowedClaims", multiline: true },
+      ],
+    },
+    {
+      heading: "Execution",
+      helper: "Define timing, CTA, and success metric.",
+      items: [
+        { label: "Send window", placeholder: "Example: Tue–Thu morning", field: "sendWindow" },
+        { label: "Success metric", placeholder: "Example: bookings, replies, clicks", field: "successMetric" },
+        { label: "Primary CTA", placeholder: "Example: Book your call", field: "primaryCta" },
+      ],
+    },
   ];
 
-  const fields: Array<[string, string, Array<{ label: string; placeholder: string }>]> = [
-    ["Campaign intent", "Define what this campaign is trying to accomplish.", [
-      { label: "Campaign name", placeholder: "Example: Cold Lead Reactivation — May Week 2" },
-      { label: "Campaign goal", placeholder: "Example: Reactivate dormant warm leads" },
-      { label: "Campaign type", placeholder: "Example: Reactivation, nurture, event invite" },
-    ]],
-    ["Audience", "Choose who this campaign is for and who should be excluded.", [
-      { label: "Audience / segment", placeholder: "Example: Dormant warm leads" },
-      { label: "Allowed exclusions", placeholder: "Example: Current clients, recent unsubscribes" },
-      { label: "Source mapping", placeholder: "Example: Keap tag or manual audience" },
-    ]],
-    ["Offer / lead magnet", "Select what the audience is being offered and what claims are allowed.", [
-      { label: "Offer selection", placeholder: "Example: Free SAGE Strategy Call" },
-      { label: "Promise / CTA", placeholder: "Example: Book your call" },
-      { label: "Allowed claims", placeholder: "Example: Low-pressure strategy call" },
-    ]],
-    ["Execution", "Define timing, CTA, and success metric.", [
-      { label: "Send window", placeholder: "Example: Tue–Thu morning" },
-      { label: "Success metric", placeholder: "Example: bookings, replies, clicks" },
-      { label: "Primary CTA", placeholder: "Example: Book your call" },
-    ]],
-  ];
+  const updateField = (field: keyof typeof form, value: string) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const saveCampaign = async (mode: "save" | "draft") => {
+    const status = mode === "draft" ? "agent_drafting" : "intake_draft";
+    const stage = mode === "draft" ? "Copy" : "Intake";
+    const nextAction = mode === "draft"
+      ? "Agent draft queued from campaign intake."
+      : "Complete the intake or run an agent draft.";
+    const riskLevel = blueApprovalRequired ? "red" : bariApprovalRequired ? "yellow" : "green";
+    const pendingApprovals = [
+      ...(bariApprovalRequired ? (["bari"] as const) : []),
+      ...(blueApprovalRequired ? (["blue"] as const) : []),
+      "internal",
+    ];
+    const availableLibraryRecords = (libraryRecords ?? []) as Array<{ type: string; name: string; recordId: string }>;
+    const matchingOffer = availableLibraryRecords.find((item) => item.type !== "audience" && item.name.toLowerCase() === form.offerSelection.trim().toLowerCase());
+    const matchingAudience = availableLibraryRecords.find((item) => item.type === "audience" && item.name.toLowerCase() === form.audienceSegment.trim().toLowerCase());
+
+    try {
+      const campaignId = createCampaignId();
+      const patch = Object.fromEntries(
+        Object.entries({
+          name: form.campaignName.trim() || "Untitled campaign",
+          type: form.campaignType.trim() || "campaign",
+          goal: form.campaignGoal.trim() || "Campaign goal",
+          channels: ["email"],
+          audience: form.audienceSegment.trim() || "Unspecified audience",
+          audienceId: matchingAudience?.recordId,
+          offer: form.offerSelection.trim() || "No offer selected",
+          offerId: matchingOffer?.recordId,
+          primaryCta: form.primaryCta.trim() || form.promiseCta.trim() || undefined,
+          sendWindow: form.sendWindow.trim() || undefined,
+          successMetric: form.successMetric.trim() || undefined,
+          allowedClaims: splitLines(form.allowedClaims),
+          knownExclusions: splitLines(form.exclusions),
+          sourceMapping: form.sourceMapping.trim() || undefined,
+          keapTagMapping: form.sourceMapping.trim() || undefined,
+          ownerId: actorId,
+          ownerName: actorName,
+          stage,
+          status,
+          riskLevel,
+          pendingApprovals,
+          bariApprovalRequired,
+          blueApprovalRequired,
+          internalApprovalRequired: true,
+          bariApprovalStatus: bariApprovalRequired ? "pending" : undefined,
+          blueApprovalStatus: blueApprovalRequired ? "pending" : undefined,
+          internalApprovalStatus: "pending",
+          copyStatus: mode === "draft" ? "Drafting in progress" : "Intake saved",
+          keapPrepStatus: keapMappingReady ? "Mapped" : "Needs mapping",
+          responseStatus: "Queued",
+          learningStatus: "Pending",
+          nextAction,
+          notes: form.promiseCta.trim() || undefined,
+        }).filter(([, value]) => value !== undefined),
+      );
+      await createCampaignRecord({
+        campaignId,
+        patch: patch as never,
+      });
+      router.push("/campaigns");
+    } catch {
+      setFeedback("Unable to save campaign. Check Convex connection.");
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -554,27 +712,38 @@ export function CampaignIntakeSection() {
         eyebrow="Campaign configuration"
         title="Create Campaign"
         description="Configure the campaign system state, route likely approvals, and generate the first agent draft."
-        actions={<button onClick={() => setFeedback("Agent draft run started in demo mode using the current intake values.")} type="button"><Button><Play className="mr-2 h-4 w-4" /> Run Agent Draft</Button></button>}
+        actions={<button onClick={() => void saveCampaign("draft")} type="button"><Button><Play className="mr-2 h-4 w-4" /> Run Agent Draft</Button></button>}
       />
       {feedback ? <ControlPanel className="border-sky-500/30 bg-sky-500/10 p-3 text-sm text-sky-100">{feedback}</ControlPanel> : null}
       <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="grid gap-4">
-          {fields.map(([heading, helper, items]) => (
-            <ControlPanel key={heading as string} className="p-4">
+          {intakeSections.map((section) => (
+            <ControlPanel key={section.heading} className="p-4">
               <div className="mb-4 flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-sky-300" />
-                <p className="text-sm font-semibold text-slate-100">{heading as string}</p>
+                <p className="text-sm font-semibold text-slate-100">{section.heading}</p>
               </div>
-              <p className="mb-4 text-sm text-slate-300">{helper}</p>
+              <p className="mb-4 text-sm text-slate-300">{section.helper}</p>
               <div className="grid gap-3 md:grid-cols-2">
-                {(items as Array<{ label: string; placeholder: string }>).map((item) => (
+                {section.items.map((item) => (
                   <label key={item.label} className="grid gap-2 text-sm text-slate-200">
                     <span className="font-medium">{item.label}</span>
                     <div className="rounded-lg border border-slate-700 bg-slate-950/90 p-3">
-                      <input
-                        className="w-full border-0 bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-500"
-                        placeholder={item.placeholder}
-                      />
+                      {item.multiline ? (
+                        <textarea
+                          className="min-h-[5rem] w-full border-0 bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-500"
+                          onChange={(event) => updateField(item.field, event.target.value)}
+                          placeholder={item.placeholder}
+                          value={form[item.field]}
+                        />
+                      ) : (
+                        <input
+                          className="w-full border-0 bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-500"
+                          onChange={(event) => updateField(item.field, event.target.value)}
+                          placeholder={item.placeholder}
+                          value={form[item.field]}
+                        />
+                      )}
                     </div>
                   </label>
                 ))}
@@ -587,7 +756,7 @@ export function CampaignIntakeSection() {
           count={`${checklist.filter((item) => item.complete).length}/${checklist.length}`}
           tone="blue"
           subtitle="Operator checklist before draft creation and approval routing."
-          action={<button onClick={() => setFeedback("Intake saved in demo mode. You can now run an agent draft.")} type="button"><Button variant="secondary">Save Intake</Button></button>}
+          action={<button onClick={() => void saveCampaign("save")} type="button"><Button variant="secondary">Save Intake</Button></button>}
         >
           <ReadinessChecklist items={checklist} />
         </QueueLane>
@@ -597,10 +766,45 @@ export function CampaignIntakeSection() {
 }
 
 export function CampaignDetailSection({ campaignId }: { campaignId?: string }) {
-  const campaign = campaigns.find((item) => item.id === campaignId) ?? campaigns[0];
-  const relatedApprovals = approvals.filter((approval) => approval.campaignId === campaign.id);
-  const perf = performanceSnapshots.find((item) => item.campaignId === campaign.id);
-  const reply = responses.find((item) => item.campaignId === campaign.id);
+  const [seedAttempted, setSeedAttempted] = useState(false);
+  const campaignRecord = useQuery(api.campaigns.getCampaignRecordByCampaignId, campaignId ? { campaignId } : "skip");
+  const approvalRecords = useQuery(api.approvals.listApprovalItems);
+  const allCampaigns = useQuery(api.campaigns.listCampaignRecords);
+  const responseRecords = useQuery(api.responses.listResponseRecords);
+  const seedDefaultCampaignRecordsIfEmpty = useMutation(api.campaigns.seedDefaultCampaignRecordsIfEmpty);
+  const seededFallback: Campaign[] = useMemo(() => (allCampaigns ?? []).map((record: Parameters<typeof toCampaign>[0]) => toCampaign(record)), [allCampaigns]);
+
+  useEffect(() => {
+    if (allCampaigns === undefined || allCampaigns.length > 0 || seedAttempted) return;
+    setSeedAttempted(true);
+    void seedDefaultCampaignRecordsIfEmpty().catch(() => {
+      setSeedAttempted(false);
+    });
+  }, [allCampaigns, seedAttempted, seedDefaultCampaignRecordsIfEmpty]);
+
+  const campaign = useMemo(() => {
+    if (campaignRecord) return toCampaign(campaignRecord as never);
+    return seededFallback.find((item) => item.id === campaignId) ?? seededFallback[0];
+  }, [campaignId, campaignRecord, seededFallback]);
+  const relatedApprovals = useMemo(
+    () => ((approvalRecords ?? []) as Array<{ linkedCampaignId?: string; title: string; owner: string; riskLevel: string; description: string }>).filter((approval) => approval.linkedCampaignId === campaign?.id),
+    [approvalRecords, campaign?.id],
+  );
+  const perf = performanceSnapshots.find((item) => item.campaignId === campaign?.id);
+  const relatedResponses = useMemo(
+    () => ((responseRecords ?? []) as Array<{ campaignId?: string; campaignName?: string; summary: string }>).filter((response) => response.campaignId === campaign?.id || response.campaignName === campaign?.name),
+    [responseRecords, campaign?.id, campaign?.name],
+  );
+  const reply = relatedResponses[0];
+
+  if (!campaign) {
+    return (
+      <div className="space-y-5">
+        <SectionHeader eyebrow="Campaign record" title="Campaign" description="Loading campaign record." actions={<Link href="/campaigns"><Button variant="secondary">Back to Campaigns</Button></Link>} />
+        <ControlPanel className="p-4 text-sm text-slate-300">Loading campaign from Convex.</ControlPanel>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -638,9 +842,9 @@ export function CampaignDetailSection({ campaignId }: { campaignId?: string }) {
         </ControlPanel>
         <div className="grid gap-4">
           <QueueLane title="Approval Requirements" count={relatedApprovals.length} tone="amber" subtitle="Current human gates for this campaign.">
-            <SignalList items={relatedApprovals.map((approval) => ({ label: approval.title, value: approval.owner, tone: riskTone(approval.riskLevel), detail: approval.reason }))} />
+            <SignalList items={relatedApprovals.map((approval) => ({ label: approval.title, value: approval.owner, tone: riskTone(approval.riskLevel), detail: approval.description }))} />
           </QueueLane>
-          <QueueLane title="Response / Performance" count={perf ? 2 : 1} tone="purple" subtitle="Live signals attached to this campaign.">
+          <QueueLane title="Response / Performance" count={(reply ? 1 : 0) + (perf ? 1 : 0)} tone="purple" subtitle="Live signals attached to this campaign.">
             <div className="space-y-2">
               {reply ? <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3 text-sm text-slate-300">{reply.summary}</div> : null}
               {perf ? <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3 text-sm text-slate-300">{perf.summary}</div> : null}

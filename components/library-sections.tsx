@@ -3,7 +3,7 @@
 import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, BookOpen, Filter, Search, Sparkles } from "lucide-react";
+import { AlertTriangle, BookOpen, Filter, Search, Sparkles, X } from "lucide-react";
 import type { LearningInsight, LibraryItem } from "@/lib/domain";
 import { Button, ConsoleTable, ControlPanel, InlineAction, SectionHeader, StatusBadge, StatusDot, Td, Th, TableHead } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,11 @@ type InventoryRecord = {
 
 type EditorDraft = Record<string, string | number | boolean>;
 type EditorMode = "view" | "edit" | "create";
+type AdvancedFilterDefinition = {
+  key: string;
+  label: string;
+  getValue: (record: InventoryRecord) => string;
+};
 
 const libraryPageConfig: Record<LibraryKey, { title: string; summary: string; tone: string; filters: string[]; columns: string[] }> = {
   offers: {
@@ -403,6 +408,133 @@ function rowMatchesFilter(key: LibraryKey, record: InventoryRecord, activeFilter
 function filterCountFor(key: LibraryKey, filter: string, rows: InventoryRecord[]) {
   if (filter === "All") return rows.length;
   return rows.filter((row) => rowMatchesFilter(key, row, filter)).length;
+}
+
+function toSearchText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(toSearchText).join(" ");
+  if (value && typeof value === "object") return Object.values(value).map(toSearchText).join(" ");
+  return "";
+}
+
+function recordMatchesSearch(record: InventoryRecord, query: string) {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return true;
+  const sourceText = toSearchText(record.source);
+  const haystack = [record.title, record.summary, record.status, ...record.cells, sourceText].join(" ").toLowerCase();
+  return haystack.includes(normalizedQuery);
+}
+
+function advancedFilterDefinitionsFor(key: LibraryKey): AdvancedFilterDefinition[] {
+  if (key === "email") {
+    return [
+      {
+        key: "sourceType",
+        label: "Source Type",
+        getValue: (record) => record.kind === "library" ? readPayloadString(record.source as LibraryItem, "sourceType", "Unknown") : "",
+      },
+      {
+        key: "retrieval",
+        label: "Bari Retrieval",
+        getValue: (record) => record.kind === "library" ? (readPayloadBoolean(record.source as LibraryItem, "allowedForBariVoice", false) ? "Allowed" : "Blocked") : "",
+      },
+    ];
+  }
+  if (key === "offers") {
+    return [
+      {
+        key: "type",
+        label: "Type",
+        getValue: (record) => record.kind === "library" ? formatLabel((record.source as LibraryItem).type) : "",
+      },
+      {
+        key: "approvalOwner",
+        label: "Approval Owner",
+        getValue: (record) => record.kind === "library" ? readPayloadString(record.source as LibraryItem, "approvalOwner", "Operator") : "",
+      },
+    ];
+  }
+  if (key === "voice-rules") {
+    return [
+      {
+        key: "severity",
+        label: "Severity",
+        getValue: (record) => record.cells[1] ?? "",
+      },
+      {
+        key: "status",
+        label: "Status",
+        getValue: (record) => record.kind === "library" ? readPayloadString(record.source as LibraryItem, "lifecycleStatus", "Active") : "",
+      },
+    ];
+  }
+  if (key === "signoffs") {
+    return [
+      {
+        key: "status",
+        label: "Status",
+        getValue: (record) => formatLabel(record.status),
+      },
+      {
+        key: "autoChoose",
+        label: "Agent Auto Choose",
+        getValue: (record) => record.kind === "library" ? (readPayloadBoolean(record.source as LibraryItem, "agentAutoChoose", false) ? "Yes" : "No") : "",
+      },
+    ];
+  }
+  if (key === "audiences") {
+    return [
+      {
+        key: "source",
+        label: "Source",
+        getValue: (record) => record.kind === "library" ? readPayloadString(record.source as LibraryItem, "sourceLabel", readPayloadString(record.source as LibraryItem, "sourceType", "Unknown")) : "",
+      },
+      {
+        key: "performance",
+        label: "Performance",
+        getValue: (record) => record.kind === "library" ? readPayloadString(record.source as LibraryItem, "performanceNotes", "Unknown") : "",
+      },
+    ];
+  }
+  if (key === "compliance") {
+    return [
+      {
+        key: "severity",
+        label: "Severity",
+        getValue: (record) => record.cells[1] ?? "",
+      },
+      {
+        key: "owner",
+        label: "Owner",
+        getValue: (record) => record.kind === "library" ? readPayloadString(record.source as LibraryItem, "owner", "Blue / Compliance") : "",
+      },
+    ];
+  }
+  return [
+    {
+      key: "source",
+      label: "Source",
+      getValue: (record) => record.kind === "learning" ? formatLabel((record.source as LearningInsight).source) : "",
+    },
+    {
+      key: "status",
+      label: "Status",
+      getValue: (record) => formatLabel(record.status),
+    },
+  ];
+}
+
+function recordMatchesAdvancedFilters(record: InventoryRecord, definitions: AdvancedFilterDefinition[], values: Record<string, string>) {
+  return definitions.every((definition) => {
+    const selected = values[definition.key];
+    if (!selected) return true;
+    return definition.getValue(record) === selected;
+  });
+}
+
+function uniqueAdvancedFilterOptions(rows: InventoryRecord[], definition: AdvancedFilterDefinition) {
+  return [...new Set(rows.map((row) => definition.getValue(row)).filter(Boolean))].sort((left, right) => left.localeCompare(right));
 }
 
 /** Semantic dot tone per page filter (matches previous status-strip meaning). */
@@ -1224,6 +1356,10 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
   const config = libraryPageConfig[key] ?? libraryPageConfig.offers;
   const [activeFilter, setActiveFilter] = useState(config.filters[0] ?? "All");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [advancedFilters, setAdvancedFilters] = useState<Record<string, string>>({});
   const [editorMode, setEditorMode] = useState<EditorMode>("view");
   const [draft, setDraft] = useState<EditorDraft>(() => createEmptyDraft(key));
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -1259,26 +1395,41 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
   }, [convexLearningInsights, key, learningSeedAttempted, seedDefaultLearningInsightsIfEmpty]);
 
   const libraryRecords = useMemo(
-    () => (convexLibraryItems ?? []).map((record) => toLibraryItem(record as never)),
+    () => (convexLibraryItems ?? []).map((record) => toLibraryItem(record as Parameters<typeof toLibraryItem>[0])),
     [convexLibraryItems],
   );
   const learningRecords = useMemo(
-    () => (convexLearningInsights ?? []).map((record) => toLearningInsight(record as never)),
+    () => (convexLearningInsights ?? []).map((record) => toLearningInsight(record as Parameters<typeof toLearningInsight>[0])),
     [convexLearningInsights],
   );
 
   const allRows = useMemo(() => rowsFor(key, libraryRecords, learningRecords), [key, libraryRecords, learningRecords]);
-  const filteredRows = useMemo(() => allRows.filter((row) => rowMatchesFilter(key, row, activeFilter)), [activeFilter, allRows, key]);
+  const advancedFilterDefinitions = useMemo(() => advancedFilterDefinitionsFor(key), [key]);
+  const filteredRows = useMemo(
+    () =>
+      allRows.filter(
+        (row) =>
+          rowMatchesFilter(key, row, activeFilter)
+          && recordMatchesSearch(row, searchText)
+          && recordMatchesAdvancedFilters(row, advancedFilterDefinitions, advancedFilters),
+      ),
+    [activeFilter, advancedFilterDefinitions, advancedFilters, allRows, key, searchText],
+  );
   const resolvedSelectedId = useMemo(() => {
     if (!filteredRows.length) return null;
     if (selectedId && filteredRows.some((row) => row.id === selectedId)) return selectedId;
     return filteredRows[0].id;
   }, [filteredRows, selectedId]);
   const selectedRecord = filteredRows.find((row) => row.id === resolvedSelectedId);
+  const hasSearchOrAdvancedFilters = searchText.trim().length > 0 || Object.values(advancedFilters).some(Boolean);
 
   useEffect(() => {
     setActiveFilter(config.filters[0] ?? "All");
     setSelectedId(null);
+    setSearchOpen(false);
+    setSearchText("");
+    setFilterOpen(false);
+    setAdvancedFilters({});
     setEditorMode("view");
     setDraft(createEmptyDraft(key));
     setSaveError(null);
@@ -1322,6 +1473,13 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
 
   const handleDraftChange = (field: string, value: string | number | boolean) => {
     setDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const clearSearchAndAdvancedFilters = () => {
+    setSearchText("");
+    setSearchOpen(false);
+    setAdvancedFilters({});
+    setFilterOpen(false);
   };
 
   const handleSave = async () => {
@@ -1374,18 +1532,23 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
                 Add record
               </Button>
             </button>
-            <button className="focus-ring" onClick={() => setDemoNotice("Demo: Advanced filter drawer not wired; use chips to scope inventory.")} type="button">
+            <button className="focus-ring" onClick={() => setFilterOpen((current) => !current)} type="button">
               <Button variant="secondary">
                 <Filter className="mr-2 h-4 w-4" />
                 Filter
               </Button>
             </button>
-            <button className="focus-ring" onClick={() => setDemoNotice("Demo: Search scopes seeded records only in this build.")} type="button">
+            <button className="focus-ring" onClick={() => setSearchOpen((current) => !current)} type="button">
               <Button variant="secondary">
                 <Search className="mr-2 h-4 w-4" />
                 Search
               </Button>
             </button>
+            {hasSearchOrAdvancedFilters ? (
+              <button className="focus-ring" onClick={clearSearchAndAdvancedFilters} type="button">
+                <Button variant="secondary">Clear</Button>
+              </button>
+            ) : null}
           </>
         }
       />
@@ -1396,6 +1559,57 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
 
       {demoNotice ? (
         <ControlPanel className="border-sky-500/30 bg-sky-500/10 p-3 text-sm text-sky-100">{demoNotice}</ControlPanel>
+      ) : null}
+
+      {searchOpen ? (
+        <ControlPanel className="p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[240px] flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <input
+                className="focus-ring w-full rounded-lg border border-slate-700 bg-slate-950/80 py-2 pl-9 pr-10 text-sm text-slate-100 placeholder:text-slate-500"
+                onChange={(event) => setSearchText(event.target.value)}
+                placeholder="Search this library…"
+                value={searchText}
+              />
+              {searchText ? (
+                <button
+                  className="focus-ring absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                  onClick={() => setSearchText("")}
+                  type="button"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </ControlPanel>
+      ) : null}
+
+      {filterOpen ? (
+        <ControlPanel className="p-3">
+          <div className="grid gap-3 md:grid-cols-2">
+            {advancedFilterDefinitions.map((definition) => {
+              const options = uniqueAdvancedFilterOptions(allRows, definition);
+              return (
+                <Field key={definition.key} label={definition.label}>
+                  <select
+                    className={inputStyles}
+                    onChange={(event) => setAdvancedFilters((current) => ({ ...current, [definition.key]: event.target.value }))}
+                    value={advancedFilters[definition.key] ?? ""}
+                  >
+                    <option value="">All</option>
+                    {options.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              );
+            })}
+          </div>
+        </ControlPanel>
       ) : null}
 
       <div className="flex flex-wrap gap-2">
@@ -1488,7 +1702,9 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryKey }) {
               </tr>
             ) : !filteredRows.length ? (
               <tr>
-                <td className="px-4 py-6 text-sm text-slate-300" colSpan={config.columns.length}>No library records found.</td>
+                <td className="px-4 py-6 text-sm text-slate-300" colSpan={config.columns.length}>
+                  {hasSearchOrAdvancedFilters ? "No records match this search." : "No library records found."}
+                </td>
               </tr>
             ) : filteredRows.map((row) => {
               const isSelected = row.id === resolvedSelectedId;

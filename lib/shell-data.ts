@@ -119,11 +119,11 @@ export const searchRecords: SearchRecord[] = [
     })),
   ...responses.map((response) => ({
     id: response.id,
-    title: response.intent.replace(/_/g, " "),
+    title: response.title,
     category: "Response Intelligence",
-    description: `${response.classification.replace(/_/g, " ")} · ${response.summary}`,
+    description: `${response.classification} · ${response.summary}`,
     href: "/intelligence/responses",
-    keywords: [response.sentiment, response.urgency],
+    keywords: [response.sentiment, response.urgency, ...(response.tags ?? [])],
   })),
   ...learningInsights.map((insight) => ({
     id: insight.id,

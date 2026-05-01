@@ -1,13 +1,14 @@
 "use client";
 
 import { api } from "@/convex/_generated/api";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Braces, ChevronLeft, GitBranch, RotateCcw, Save, ShieldAlert, Sparkles } from "lucide-react";
-import { defaultAgentConfigs, getDefaultAgentConfig, getDefaultAgentRuntimeState } from "@/lib/agent-config";
-import { agentRunSteps, campaigns, learningInsights, performanceSnapshots, responses } from "@/lib/data/demo-data";
+import { defaultAgentConfigs, getDefaultAgentConfig } from "@/lib/agent-config";
+import { agentRunSteps, campaigns, learningInsights, performanceSnapshots } from "@/lib/data/demo-data";
 import type { AgentConfigRecord } from "@/lib/domain";
+import { useAppUser } from "@/components/auth/app-user-context";
 import { cn } from "@/lib/utils";
 import {
   AgentActivityBars,
@@ -37,9 +38,99 @@ function tone(status: string) {
 const responseQueues = ["Needs Reply", "Hot Leads", "Questions", "Objections", "Complaints", "Unsubscribes", "Testimonials", "Unmatched", "All Synced"];
 const agentDetailTabs = ["overview", "prompt", "io", "rules", "routing", "runtime", "runs"] as const;
 type AgentDetailTab = (typeof agentDetailTabs)[number];
+type AgentRuntimeRecord = {
+  agentId: string;
+  status: string;
+  isRunning: boolean;
+  currentTaskLabel?: string;
+  currentTaskDetail?: string;
+  lastStartedAt?: number;
+  lastFinishedAt?: number;
+  lastRunId?: string;
+  lastError?: string;
+  lastOutputSummary?: string;
+  updatedAt: number;
+};
+type AgentRunRecord = {
+  runId: string;
+  campaignId?: string;
+  agentId: string;
+  status: string;
+  inputSnapshot?: string;
+  outputSummary?: string;
+  outputJson?: string;
+  startedAt: number;
+  finishedAt?: number;
+  error?: string;
+};
+type ResponseRecord = ReturnType<typeof toResponseRecord>;
 const actionButtonStyles = "focus-ring inline-flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-semibold transition";
 const inputStyles = "console-field-control focus-ring w-full rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-slate-100 placeholder:text-slate-500";
 const textareaStyles = `${inputStyles} min-h-[120px] resize-y`;
+
+function toResponseRecord(record: {
+  responseId: string;
+  title: string;
+  classification: string;
+  status: string;
+  sentiment: "positive" | "neutral" | "negative";
+  urgency: "low" | "medium" | "high";
+  summary: string;
+  originalMessage?: string;
+  senderName?: string;
+  senderEmail?: string;
+  receivedAt: number;
+  campaignId?: string;
+  campaignName?: string;
+  matchConfidence?: number;
+  recommendedAction: string;
+  suggestedReply?: string;
+  suggestedReplyStatus?: string;
+  noAutoSend: boolean;
+  assignedTo?: string;
+  source?: string;
+  sourceMessageId?: string;
+  helpdeskThreadId?: string;
+  tags: string[];
+  createdAt: number;
+  updatedAt: number;
+  resolvedAt?: number;
+  resolvedBy?: string;
+  notes?: string;
+  sortOrder: number;
+}) {
+  return {
+    id: record.responseId,
+    title: record.title,
+    classification: record.classification,
+    status: record.status,
+    sentiment: record.sentiment,
+    urgency: record.urgency,
+    summary: record.summary,
+    originalMessage: record.originalMessage,
+    senderName: record.senderName,
+    senderEmail: record.senderEmail,
+    receivedAt: record.receivedAt,
+    campaignId: record.campaignId,
+    campaignName: record.campaignName,
+    matchConfidence: record.matchConfidence,
+    recommendedAction: record.recommendedAction,
+    suggestedReply: record.suggestedReply,
+    suggestedReplyStatus: record.suggestedReplyStatus,
+    noAutoSend: record.noAutoSend,
+    assignedTo: record.assignedTo,
+    source: record.source,
+    sourceMessageId: record.sourceMessageId,
+    helpdeskThreadId: record.helpdeskThreadId,
+    tags: record.tags,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    resolvedAt: record.resolvedAt,
+    resolvedBy: record.resolvedBy,
+    notes: record.notes,
+    sortOrder: record.sortOrder,
+  };
+}
 
 function sanitizeAgentConfigForConvex(config: AgentConfigRecord) {
   return {
@@ -252,12 +343,12 @@ export function AgentRunsSection() {
 }
 
 export function LangGraphSection() {
+  const appUser = useAppUser();
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<AgentDetailTab>("overview");
   const [draftConfigMap, setDraftConfigMap] = useState<Record<string, AgentConfigRecord>>({});
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isWorking, setIsWorking] = useState(false);
-  const timersRef = useRef<number[]>([]);
   const seedAttemptedRef = useRef(false);
 
   const agentConfigs = useQuery(api.agents.listAgentConfigs);
@@ -271,18 +362,8 @@ export function LangGraphSection() {
   const seedDefaultAgentRuntimeStatesIfEmpty = useMutation(api.agents.seedDefaultAgentRuntimeStatesIfEmpty);
   const seedDefaultAgentRunsIfEmpty = useMutation(api.agents.seedDefaultAgentRunsIfEmpty);
   const upsertAgentConfig = useMutation(api.agents.upsertAgentConfig);
-  const upsertAgentRuntimeState = useMutation(api.agents.upsertAgentRuntimeState);
-  const createAgentRun = useMutation(api.agents.createAgentRun);
-  const upsertAgentRun = useMutation(api.agents.upsertAgentRun);
+  const runAgentDryRun = useAction(api.runtimePrep.runAgentDryRun);
   const resetDemoAgentRuntimeState = useMutation(api.agents.resetDemoAgentRuntimeState);
-
-  useEffect(() => {
-    return () => {
-      for (const timer of timersRef.current) {
-        window.clearTimeout(timer);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     if (agentConfigs === undefined || seedAttemptedRef.current || agentConfigs.length > 0) return;
@@ -310,29 +391,30 @@ export function LangGraphSection() {
     seedDefaultAgentRunsIfEmpty,
   ]);
 
-  const persistedConfigMap = useMemo(
-    () => buildRecordMap(agentConfigs ?? defaultAgentConfigs),
+  const persistedConfigMap: Record<string, AgentConfigRecord> = useMemo(
+    () => buildRecordMap(agentConfigs ?? defaultAgentConfigs) as Record<string, AgentConfigRecord>,
     [agentConfigs],
   );
-  const runtimeMap = useMemo(
-    () => buildRecordMap(runtimeStates ?? []),
+  const runtimeMap: Record<string, AgentRuntimeRecord> = useMemo(
+    () => buildRecordMap(runtimeStates ?? []) as Record<string, AgentRuntimeRecord>,
     [runtimeStates],
   );
-  const effectiveConfigMap = useMemo(
+  const effectiveConfigMap: Record<string, AgentConfigRecord> = useMemo(
     () => ({
       ...persistedConfigMap,
       ...draftConfigMap,
     }),
     [draftConfigMap, persistedConfigMap],
   );
-  const orderedConfigs = useMemo(
+  const orderedConfigs: AgentConfigRecord[] = useMemo(
     () => [...Object.values(effectiveConfigMap)].sort((left, right) => left.workflowOrder - right.workflowOrder),
     [effectiveConfigMap],
   );
 
   const selectedConfig = selectedAgentId ? effectiveConfigMap[selectedAgentId] ?? null : null;
-  const selectedRuntime = selectedAgentId ? runtimeMap[selectedAgentId] ?? null : null;
-  const selectedRunsList = selectedRuns ?? [];
+  const selectedRuntime: AgentRuntimeRecord | null = selectedAgentId ? runtimeMap[selectedAgentId] ?? null : null;
+  const selectedRunsList: AgentRunRecord[] = (selectedRuns ?? []) as AgentRunRecord[];
+  const actorName = appUser.displayName || appUser.clerkUserId || "console_operator";
 
   const updateConfig = <K extends keyof AgentConfigRecord>(agentId: string, key: K, value: AgentConfigRecord[K]) => {
     setDraftConfigMap((current) => ({
@@ -356,9 +438,9 @@ export function LangGraphSection() {
           ...sanitizeAgentConfigForConvex(selectedConfig),
           configVersion: (persistedConfigMap[selectedAgentId]?.configVersion ?? selectedConfig.configVersion) + 1,
           lastEditedAt: savedAt,
-          lastEditedBy: "demo_operator",
+          lastEditedBy: actorName,
           updatedAt: savedAt,
-          updatedBy: "demo_operator",
+          updatedBy: actorName,
         },
       });
       setDraftConfigMap((current) => {
@@ -389,9 +471,9 @@ export function LangGraphSection() {
           ...sanitizeAgentConfigForConvex(fallbackConfig),
           configVersion: (persistedConfigMap[selectedAgentId]?.configVersion ?? fallbackConfig.configVersion) + 1,
           lastEditedAt: savedAt,
-          lastEditedBy: "demo_operator",
+          lastEditedBy: actorName,
           updatedAt: savedAt,
-          updatedBy: "demo_operator",
+          updatedBy: actorName,
         },
       });
       await resetDemoAgentRuntimeState({ agentId: selectedAgentId });
@@ -411,118 +493,18 @@ export function LangGraphSection() {
   const testAgent = async () => {
     if (!selectedAgentId || !selectedConfig) return;
 
-    const startedAt = Date.now();
-    const runId = `demo-${selectedAgentId}-${startedAt}`;
-    const taskSequence = [
-      { label: "Reading config context", detail: "Loading prompt scaffolding, rules, and required context sources." },
-      { label: "Executing agent logic", detail: `Running ${selectedConfig.displayName} with ${selectedConfig.preferredProvider} / ${selectedConfig.preferredModel}.` },
-      { label: "Preparing handoff output", detail: "Validating output contract and runtime summary for the next workflow node." },
-    ];
-
-    for (const timer of timersRef.current) {
-      window.clearTimeout(timer);
-    }
-    timersRef.current = [];
-
     setIsWorking(true);
     try {
-      await upsertAgentRuntimeState({
+      await runAgentDryRun({
         agentId: selectedAgentId,
-        patch: {
-          ...(selectedRuntime ?? getDefaultAgentRuntimeState(selectedAgentId)),
-          status: "running",
-          isRunning: true,
-          currentTaskLabel: taskSequence[0].label,
-          currentTaskDetail: taskSequence[0].detail,
-          lastStartedAt: startedAt,
-          lastRunId: runId,
-          lastError: undefined,
-          updatedAt: startedAt,
-        },
-      });
-
-      await createAgentRun({
-        runId,
         campaignId: "camp_reactivation_may",
-        agentId: selectedAgentId,
-        status: "running",
-        inputSnapshot: `${selectedConfig.displayName} demo test harness`,
-        outputSummary: "Running seeded demo test.",
-        outputJson: JSON.stringify({ provider: selectedConfig.preferredProvider, model: selectedConfig.preferredModel }, null, 2),
-        startedAt,
       });
+      setFeedback(`${selectedConfig.displayName} test run completed.`);
     } catch {
       setFeedback("Unable to run test agent. Check Convex connection.");
+    } finally {
       setIsWorking(false);
-      return;
     }
-
-    taskSequence.slice(1).forEach((task, index) => {
-      const timer = window.setTimeout(() => {
-        void upsertAgentRuntimeState({
-          agentId: selectedAgentId,
-          patch: {
-            currentTaskLabel: task.label,
-            currentTaskDetail: task.detail,
-            updatedAt: Date.now(),
-          },
-        }).catch(() => {
-          setFeedback("Unable to update runtime state. Check Convex connection.");
-        });
-      }, (index + 1) * 900);
-      timersRef.current.push(timer);
-    });
-
-    const completeTimer = window.setTimeout(() => {
-      const finishedAt = Date.now();
-      const outputSummary = `${selectedConfig.displayName} demo test completed with structured output scaffolding intact.`;
-
-      void Promise.all([
-        upsertAgentRuntimeState({
-          agentId: selectedAgentId,
-          patch: {
-            ...(selectedRuntime ?? getDefaultAgentRuntimeState(selectedAgentId)),
-            status: "complete",
-            isRunning: false,
-            currentTaskLabel: "Demo test complete",
-            currentTaskDetail: "Runtime fields updated successfully for future live LangGraph execution.",
-            lastFinishedAt: finishedAt,
-            lastOutputSummary: outputSummary,
-            lastRunId: runId,
-            updatedAt: finishedAt,
-          },
-        }),
-        upsertAgentRun({
-          runId,
-          patch: {
-            campaignId: "camp_reactivation_may",
-            agentId: selectedAgentId,
-            status: "complete",
-            finishedAt,
-            outputSummary,
-            outputJson: JSON.stringify(
-              {
-                currentTaskLabel: "Demo test complete",
-                nextAgentIds: selectedConfig.nextAgentIds,
-                handoffConditions: selectedConfig.handoffConditions,
-              },
-              null,
-              2,
-            ),
-          },
-        }),
-      ])
-        .then(() => {
-          setFeedback(`${selectedConfig.displayName} test run completed.`);
-        })
-        .catch(() => {
-          setFeedback("Unable to update test run results. Check Convex connection.");
-        })
-        .finally(() => {
-          setIsWorking(false);
-        });
-    }, 3200);
-    timersRef.current.push(completeTimer);
   };
 
   if (agentConfigs === undefined || runtimeStates === undefined || (selectedAgentId && selectedRuns === undefined)) {
@@ -1005,6 +987,69 @@ export function LangGraphSection() {
 }
 
 export function ResponsesSection() {
+  const appUser = useAppUser();
+  const [activeFilter, setActiveFilter] = useState("All Synced");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [notesDraft, setNotesDraft] = useState("");
+  const [replyDraft, setReplyDraft] = useState("");
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [seedAttempted, setSeedAttempted] = useState(false);
+  const responseRecords = useQuery(api.responses.listResponseRecords);
+  const campaignRecords = useQuery(api.campaigns.listCampaignRecords);
+  const seedDefaultResponseRecordsIfEmpty = useMutation(api.responses.seedDefaultResponseRecordsIfEmpty);
+  const updateSuggestedReply = useMutation(api.responses.updateSuggestedReply);
+  const updateResponseNotes = useMutation(api.responses.updateResponseNotes);
+  const markResponseResolved = useMutation(api.responses.markResponseResolved);
+  const markResponseNeedsReply = useMutation(api.responses.markResponseNeedsReply);
+
+  useEffect(() => {
+    if (responseRecords === undefined || responseRecords.length > 0 || seedAttempted) return;
+    setSeedAttempted(true);
+    void seedDefaultResponseRecordsIfEmpty().catch(() => {
+      setFeedback("Unable to load response records.");
+      setSeedAttempted(false);
+    });
+  }, [responseRecords, seedAttempted, seedDefaultResponseRecordsIfEmpty]);
+
+  const responses: ResponseRecord[] = useMemo(() => (responseRecords ?? []).map((record: Parameters<typeof toResponseRecord>[0]) => toResponseRecord(record)), [responseRecords]);
+  const campaignNameById: Map<string, string> = useMemo(
+    () => new Map((campaignRecords ?? []).map((campaign: { campaignId: string; name: string }) => [campaign.campaignId, campaign.name])),
+    [campaignRecords],
+  );
+  const filterCount = (queue: string) => {
+    if (queue === "All Synced") return responses.length;
+    if (queue === "Needs Reply") return responses.filter((item) => item.classification === "Needs Reply" || item.status === "needs_reply").length;
+    if (queue === "Hot Leads") return responses.filter((item) => item.tags.includes("hot_lead") || (item.sentiment === "positive" && item.urgency !== "low")).length;
+    if (queue === "Questions") return responses.filter((item) => item.tags.includes("question")).length;
+    if (queue === "Objections") return responses.filter((item) => item.classification === "Objections" || item.tags.includes("objection")).length;
+    if (queue === "Complaints") return responses.filter((item) => item.classification === "Complaints" || item.tags.includes("complaint")).length;
+    if (queue === "Unsubscribes") return responses.filter((item) => item.classification === "Unsubscribes" || item.tags.includes("unsubscribe")).length;
+    if (queue === "Testimonials") return responses.filter((item) => item.classification === "Testimonials" || item.tags.includes("testimonial")).length;
+    if (queue === "Unmatched") return responses.filter((item) => !item.campaignId && !item.campaignName).length;
+    return 0;
+  };
+  const filteredResponses = useMemo(() => {
+    if (activeFilter === "All Synced") return responses;
+    return responses.filter((item) => {
+      if (activeFilter === "Needs Reply") return item.classification === "Needs Reply" || item.status === "needs_reply";
+      if (activeFilter === "Hot Leads") return item.tags.includes("hot_lead") || (item.sentiment === "positive" && item.urgency !== "low");
+      if (activeFilter === "Questions") return item.tags.includes("question");
+      if (activeFilter === "Objections") return item.classification === "Objections" || item.tags.includes("objection");
+      if (activeFilter === "Complaints") return item.classification === "Complaints" || item.tags.includes("complaint");
+      if (activeFilter === "Unsubscribes") return item.classification === "Unsubscribes" || item.tags.includes("unsubscribe");
+      if (activeFilter === "Testimonials") return item.classification === "Testimonials" || item.tags.includes("testimonial");
+      if (activeFilter === "Unmatched") return !item.campaignId && !item.campaignName;
+      return true;
+    });
+  }, [activeFilter, responses]);
+  const selectedResponse = filteredResponses.find((item) => item.id === selectedId) ?? filteredResponses[0];
+  const actorName = appUser.displayName || appUser.clerkUserId || "console_operator";
+
+  useEffect(() => {
+    setNotesDraft(selectedResponse?.notes ?? "");
+    setReplyDraft(selectedResponse?.suggestedReply ?? "");
+  }, [selectedResponse]);
+
   return (
     <div className="space-y-5">
       <SectionHeader
@@ -1013,8 +1058,19 @@ export function ResponsesSection() {
         description="Monitor inbound replies, urgency, sentiment, match confidence, and manual reply posture. No auto-send in MVP."
       />
       <div className="flex flex-wrap gap-2">
-        {responseQueues.map((queue, index) => <StatusBadge key={queue} tone={index === 0 ? "amber" : index === 1 ? "green" : "gray"}>{queue}</StatusBadge>)}
+        {responseQueues.map((queue, index) => (
+          <button key={queue} onClick={() => setActiveFilter(queue)} type="button">
+            <StatusBadge tone={queue === activeFilter ? "blue" : index === 0 ? "amber" : index === 1 ? "green" : "gray"}>
+              {queue} {filterCount(queue)}
+            </StatusBadge>
+          </button>
+        ))}
       </div>
+      {feedback ? (
+        <ControlPanel className={cn("p-3 text-sm", feedback.startsWith("Unable") ? "border-rose-500/30 bg-rose-500/10 text-rose-100" : "border-sky-500/30 bg-sky-500/10 text-sky-100")}>
+          {feedback}
+        </ControlPanel>
+      ) : null}
       <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <ConsoleTable>
           <TableHead>
@@ -1029,29 +1085,118 @@ export function ResponsesSection() {
             </tr>
           </TableHead>
           <tbody>
-            {responses.map((item) => (
-              <tr key={item.id}>
-                <Td>{item.classification.replace(/_/g, " ")}</Td>
+            {responseRecords === undefined ? (
+              <tr>
+                <td className="px-4 py-6 text-sm text-slate-300" colSpan={7}>Loading response records.</td>
+              </tr>
+            ) : !filteredResponses.length ? (
+              <tr>
+                <td className="px-4 py-6 text-sm text-slate-300" colSpan={7}>No response records found.</td>
+              </tr>
+            ) : filteredResponses.map((item) => (
+              <tr className={selectedResponse?.id === item.id ? "bg-slate-900/80" : ""} key={item.id} onClick={() => setSelectedId(item.id)}>
+                <Td>{item.classification}</Td>
                 <Td><StatusBadge tone={item.urgency === "high" ? "red" : item.urgency === "medium" ? "amber" : "green"}>{item.urgency}</StatusBadge></Td>
                 <Td>{item.sentiment}</Td>
-                <Td className="min-w-[15rem]">{campaigns.find((campaign) => campaign.id === item.campaignId)?.name ?? "Unmatched"} · {Math.round(item.matchConfidence * 100)}%</Td>
+                <Td className="min-w-[15rem]">{item.campaignName ?? (item.campaignId ? campaignNameById.get(item.campaignId) : undefined) ?? "Unmatched"}{item.matchConfidence !== undefined ? ` · ${Math.round(item.matchConfidence * 100)}%` : ""}</Td>
                 <Td className="min-w-[18rem] max-w-[30rem] whitespace-normal text-slate-300">{item.summary}</Td>
-                <Td>Manual reply review</Td>
-                <Td>Draft only</Td>
+                <Td>{item.recommendedAction}</Td>
+                <Td>{item.suggestedReplyStatus === "draft_only" ? "Draft only" : item.suggestedReplyStatus ?? "Draft only"}</Td>
               </tr>
             ))}
           </tbody>
         </ConsoleTable>
-        <QueueLane title="Signal Snapshot" count={responses.length} tone="blue" subtitle="Manual response handling only.">
-          <SignalList
-            items={[
-              { label: "Needs reply", value: 1, tone: "amber" },
-              { label: "Hot leads", value: 1, tone: "green" },
-              { label: "Unmatched", value: 0, tone: "gray" },
-              { label: "No auto-send", value: "active", tone: "red" },
-            ]}
-          />
-        </QueueLane>
+        <div className="grid gap-4">
+          <QueueLane title="Signal Snapshot" count={responses.length} tone="blue" subtitle="Manual response handling only.">
+            <SignalList
+              items={[
+                { label: "Needs reply", value: filterCount("Needs Reply"), tone: "amber" },
+                { label: "Hot leads", value: filterCount("Hot Leads"), tone: "green" },
+                { label: "Unmatched", value: filterCount("Unmatched"), tone: "gray" },
+                { label: "No auto-send", value: responses.every((item) => item.noAutoSend) ? "active" : "mixed", tone: "red" },
+              ]}
+            />
+          </QueueLane>
+          <ControlPanel className="p-4">
+            {selectedResponse ? (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm font-semibold text-slate-100">{selectedResponse.title}</p>
+                  <p className="mt-1 text-sm text-slate-300">{selectedResponse.summary}</p>
+                </div>
+                <div className="grid gap-2 text-sm text-slate-300">
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">Classification: <span className="text-slate-100">{selectedResponse.classification}</span></div>
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">Urgency / Sentiment: <span className="text-slate-100">{selectedResponse.urgency} / {selectedResponse.sentiment}</span></div>
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">Matched campaign: <span className="text-slate-100">{selectedResponse.campaignName ?? "Unmatched"}</span></div>
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">Recommended action: <span className="text-slate-100">{selectedResponse.recommendedAction}</span></div>
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">Received: <span className="text-slate-100">{formatTimestamp(selectedResponse.receivedAt)}</span></div>
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">Source: <span className="text-slate-100">{selectedResponse.source ?? "Unknown"}</span></div>
+                </div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3 text-sm text-slate-300">
+                  <p className="font-semibold text-slate-100">Original message</p>
+                  <p className="mt-2 whitespace-pre-wrap">{selectedResponse.originalMessage ?? "No original message captured."}</p>
+                </div>
+                <label className="grid gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Suggested reply</span>
+                  <textarea className={textareaStyles} onChange={(event) => setReplyDraft(event.target.value)} value={replyDraft} />
+                </label>
+                <label className="grid gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Notes</span>
+                  <textarea className={textareaStyles} onChange={(event) => setNotesDraft(event.target.value)} value={notesDraft} />
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className={cn(actionButtonStyles, "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800")}
+                    onClick={() => {
+                      void updateSuggestedReply({ responseId: selectedResponse.id, suggestedReply: replyDraft, suggestedReplyStatus: "draft_only" })
+                        .then(() => setFeedback("Response saved."))
+                        .catch(() => setFeedback("Unable to save response. Check Convex connection."));
+                    }}
+                    type="button"
+                  >
+                    Save suggested reply
+                  </button>
+                  <button
+                    className={cn(actionButtonStyles, "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800")}
+                    onClick={() => {
+                      void updateResponseNotes({ responseId: selectedResponse.id, notes: notesDraft })
+                        .then(() => setFeedback("Response saved."))
+                        .catch(() => setFeedback("Unable to save response. Check Convex connection."));
+                    }}
+                    type="button"
+                  >
+                    Save notes
+                  </button>
+                  <button
+                    className={cn(actionButtonStyles, "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800")}
+                    onClick={() => {
+                      void markResponseNeedsReply({ responseId: selectedResponse.id })
+                        .then(() => setFeedback("Response saved."))
+                        .catch(() => setFeedback("Unable to save response. Check Convex connection."));
+                    }}
+                    type="button"
+                  >
+                    Mark needs reply
+                  </button>
+                  <button
+                    className={cn(actionButtonStyles, "border-sky-500/60 bg-sky-500 text-slate-950 hover:bg-sky-400")}
+                    onClick={() => {
+                      void markResponseResolved({ responseId: selectedResponse.id, resolvedBy: actorName })
+                        .then(() => setFeedback("Response saved."))
+                        .catch(() => setFeedback("Unable to save response. Check Convex connection."));
+                    }}
+                    type="button"
+                  >
+                    Mark resolved
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400">Suggested replies remain drafts only. No auto-send in MVP.</p>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-300">Select a response to inspect details.</p>
+            )}
+          </ControlPanel>
+        </div>
       </section>
     </div>
   );

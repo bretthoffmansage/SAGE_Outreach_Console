@@ -77,7 +77,7 @@ export const seedDefaultTodayTasksIfEmpty = mutation({
 
     const defaults = buildDefaultTodayTasks();
     for (const task of defaults) {
-      await ctx.db.insert("todayTasks", sanitizeTodayTaskForConvex(task) as any);
+      await ctx.db.insert("todayTasks", sanitizeTodayTaskForConvex(task) as never);
     }
 
     return { seeded: true, inserted: defaults.length };
@@ -99,7 +99,7 @@ export const completeTodayTask = mutation({
       completedAt: now,
       updatedAt: now,
     });
-    await ctx.db.replace(existing._id, next as any);
+    await ctx.db.replace(existing._id, next as never);
     return { success: true as const, taskId: args.taskId, completedAt: now };
   },
 });
@@ -119,7 +119,7 @@ export const restoreTodayTask = mutation({
       completedAt: undefined,
       updatedAt: now,
     });
-    await ctx.db.replace(existing._id, next as any);
+    await ctx.db.replace(existing._id, next as never);
     return { success: true as const, taskId: args.taskId };
   },
 });

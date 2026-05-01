@@ -127,8 +127,8 @@ export function isChildActive(pathname: string, child: NavChild) {
   return activePrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
-export function getActiveNavCategory(pathname: string) {
-  return navGroups.find((group) => group.children.some((child) => isChildActive(pathname, child))) ?? navGroups[0];
+export function getActiveNavCategory(pathname: string, groups = navGroups) {
+  return groups.find((group) => group.children.some((child) => isChildActive(pathname, child))) ?? groups[0] ?? navGroups[0];
 }
 
 export function getActiveNavChild(pathname: string, category = getActiveNavCategory(pathname)) {

@@ -107,7 +107,7 @@ export const seedDefaultLibraryItemsIfEmpty = mutation({
         payload: item.payload,
         createdAt: timestamp,
         updatedAt: timestamp,
-      }) as any);
+      }) as never);
     }
 
     return { seeded: true, inserted: libraryItems.length };
@@ -133,7 +133,7 @@ export const upsertLibraryItem = mutation({
       return { success: true as const, mode: "updated" as const, recordId: args.recordId };
     }
 
-    await ctx.db.insert("libraryItems", next as any);
+    await ctx.db.insert("libraryItems", next as never);
     return { success: true as const, mode: "inserted" as const, recordId: args.recordId };
   },
 });
@@ -174,7 +174,7 @@ export const seedDefaultLearningInsightsIfEmpty = mutation({
         payload: item.payload,
         createdAt: timestamp,
         updatedAt: timestamp,
-      }) as any);
+      }) as never);
     }
 
     return { seeded: true, inserted: learningInsights.length };
@@ -200,7 +200,7 @@ export const upsertLearningInsight = mutation({
       return { success: true as const, mode: "updated" as const, recordId: args.recordId };
     }
 
-    await ctx.db.insert("learningInsights", next as any);
+    await ctx.db.insert("learningInsights", next as never);
     return { success: true as const, mode: "inserted" as const, recordId: args.recordId };
   },
 });

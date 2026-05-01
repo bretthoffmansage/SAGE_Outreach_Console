@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { defaultAgentConfigs, defaultAgentRuns, defaultAgentRuntimeStates } from "../lib/agent-config";
+import { buildAgentRuntimeContextPayload } from "./runtime/buildAgentContext";
 
 type AgentRuntimeStatus = "idle" | "ready" | "running" | "human_pause" | "pending" | "blocked" | "complete" | "error";
 
@@ -93,6 +94,95 @@ export const getAgentConfigByAgentId = query({
   },
 });
 
+export const getAgentExecutionConfig = query({
+  args: { agentId: v.string() },
+  handler: async (ctx, args) => {
+    const config = await ctx.db.query("agentConfigs").withIndex("by_agent_id", (q) => q.eq("agentId", args.agentId)).unique();
+    const fallback = defaultAgentConfigs.find((item) => item.agentId === args.agentId);
+    const source = config ?? fallback;
+    if (!source) return null;
+
+    return {
+      agentId: source.agentId,
+      displayName: source.displayName,
+      shortDescription: source.shortDescription,
+      preferredProvider: source.preferredProvider,
+      preferredModel: source.preferredModel,
+      systemPrompt: source.systemPrompt,
+      taskPromptTemplate: source.taskPromptTemplate,
+      requiredContextSources: source.requiredContextSources,
+      nextAgentIds: source.nextAgentIds,
+      handoffConditions: source.handoffConditions,
+      allowedActions: source.allowedActions,
+      disallowedActions: source.disallowedActions,
+      humanApprovalRequired: source.humanApprovalRequired,
+      canTriggerIntegrations: source.canTriggerIntegrations,
+      enabled: source.enabled,
+    };
+  },
+});
+
+export const buildAgentRuntimeContext = query({
+  args: {
+    agentId: v.string(),
+    campaignId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const config = await ctx.db.query("agentConfigs").withIndex("by_agent_id", (q) => q.eq("agentId", args.agentId)).unique();
+    const fallback = defaultAgentConfigs.find((item) => item.agentId === args.agentId);
+    const source = config ?? fallback;
+    if (!source) return null;
+
+    const [campaign, libraryItems, learningInsights] = await Promise.all([
+      args.campaignId
+        ? ctx.db.query("campaigns").withIndex("by_campaign_id", (q) => q.eq("campaignId", args.campaignId as string)).unique()
+        : Promise.resolve(null),
+      ctx.db.query("libraryItems").collect(),
+      ctx.db.query("learningInsights").withIndex("by_status", (q) => q.eq("status", "approved")).collect(),
+    ]);
+
+    return buildAgentRuntimeContextPayload({
+      config: {
+        agentId: source.agentId,
+        displayName: source.displayName,
+        systemPrompt: source.systemPrompt,
+        taskPromptTemplate: source.taskPromptTemplate,
+        preferredProvider: source.preferredProvider,
+        preferredModel: source.preferredModel,
+        requiredContextSources: source.requiredContextSources,
+        nextAgentIds: source.nextAgentIds,
+        handoffConditions: source.handoffConditions,
+        allowedActions: source.allowedActions,
+        disallowedActions: source.disallowedActions,
+      },
+      campaign: campaign
+        ? {
+            campaignId: campaign.campaignId,
+            name: campaign.name,
+            goal: campaign.goal,
+            audience: campaign.audience,
+            offer: campaign.offer,
+            status: campaign.status,
+            stage: campaign.stage,
+            nextAction: campaign.nextAction,
+          }
+        : null,
+      libraryItems: libraryItems.map((item) => ({
+        recordId: item.recordId,
+        type: item.type,
+        name: item.name,
+        summary: item.summary,
+      })),
+      learningInsights: learningInsights.map((item) => ({
+        recordId: item.recordId,
+        title: item.title,
+        summary: item.summary,
+        confidence: item.confidence,
+      })),
+    });
+  },
+});
+
 export const upsertAgentConfig = mutation({
   args: { agentId: v.string(), patch: v.any() },
   handler: async (ctx, args: { agentId: string; patch: Record<string, unknown> }) => {
@@ -115,7 +205,7 @@ export const upsertAgentConfig = mutation({
       return { success: true, mode: "updated" as const, agentId: args.agentId };
     }
 
-    await ctx.db.insert("agentConfigs", next as any);
+    await ctx.db.insert("agentConfigs", next as never);
     return { success: true, mode: "inserted" as const, agentId: args.agentId };
   },
 });
@@ -134,7 +224,7 @@ export const seedDefaultAgentConfigsIfEmpty = mutation({
         ...config,
         updatedAt: config.lastEditedAt ?? timestamp,
         updatedBy: config.lastEditedBy,
-      }) as any);
+      }) as never);
     }
 
     return { seeded: true, inserted: defaultAgentConfigs.length };
@@ -177,8 +267,60 @@ export const upsertAgentRuntimeState = mutation({
       return { success: true, mode: "updated" as const, agentId: args.agentId };
     }
 
-    await ctx.db.insert("agentRuntimeStates", next as any);
+    await ctx.db.insert("agentRuntimeStates", next as never);
     return { success: true, mode: "inserted" as const, agentId: args.agentId };
+  },
+});
+
+export const updateAgentRuntimeStatus = mutation({
+  args: {
+    agentId: v.string(),
+    status: v.union(
+      v.literal("idle"),
+      v.literal("ready"),
+      v.literal("running"),
+      v.literal("human_pause"),
+      v.literal("pending"),
+      v.literal("blocked"),
+      v.literal("complete"),
+      v.literal("error"),
+    ),
+    isRunning: v.boolean(),
+    currentTaskLabel: v.optional(v.string()),
+    currentTaskDetail: v.optional(v.string()),
+    lastStartedAt: v.optional(v.number()),
+    lastFinishedAt: v.optional(v.number()),
+    lastRunId: v.optional(v.string()),
+    lastError: v.optional(v.string()),
+    lastOutputSummary: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.query("agentRuntimeStates").withIndex("by_agent_id", (q) => q.eq("agentId", args.agentId)).unique();
+    const base = stripSystemFields(existing) as Record<string, unknown>;
+    const fallback = defaultAgentRuntimeStates.find((state) => state.agentId === args.agentId);
+    const next = {
+      ...fallback,
+      ...base,
+      agentId: args.agentId,
+      status: args.status,
+      isRunning: args.isRunning,
+      currentTaskLabel: args.currentTaskLabel,
+      currentTaskDetail: args.currentTaskDetail,
+      lastStartedAt: args.lastStartedAt,
+      lastFinishedAt: args.lastFinishedAt,
+      lastRunId: args.lastRunId,
+      lastError: args.lastError,
+      lastOutputSummary: args.lastOutputSummary,
+      updatedAt: Date.now(),
+    };
+
+    if (existing?._id) {
+      await ctx.db.patch(existing._id, next as never);
+      return { success: true as const, mode: "updated" as const, agentId: args.agentId };
+    }
+
+    await ctx.db.insert("agentRuntimeStates", next as never);
+    return { success: true as const, mode: "inserted" as const, agentId: args.agentId };
   },
 });
 
@@ -263,8 +405,48 @@ export const upsertAgentRun = mutation({
       return { success: true, mode: "updated" as const, runId: args.runId };
     }
 
-    await ctx.db.insert("agentRuns", next as any);
+    await ctx.db.insert("agentRuns", next as never);
     return { success: true, mode: "inserted" as const, runId: args.runId };
+  },
+});
+
+export const completeAgentRun = mutation({
+  args: {
+    runId: v.string(),
+    outputSummary: v.string(),
+    outputJson: v.optional(v.string()),
+    finishedAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.query("agentRuns").withIndex("by_run_id", (q) => q.eq("runId", args.runId)).unique();
+    if (!existing) throw new Error("Agent run not found");
+    await ctx.db.patch(existing._id, {
+      ...stripSystemFields(existing),
+      status: "complete",
+      outputSummary: args.outputSummary,
+      outputJson: args.outputJson,
+      finishedAt: args.finishedAt ?? Date.now(),
+    } as never);
+    return { success: true as const, runId: args.runId };
+  },
+});
+
+export const failAgentRun = mutation({
+  args: {
+    runId: v.string(),
+    error: v.string(),
+    finishedAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.query("agentRuns").withIndex("by_run_id", (q) => q.eq("runId", args.runId)).unique();
+    if (!existing) throw new Error("Agent run not found");
+    await ctx.db.patch(existing._id, {
+      ...stripSystemFields(existing),
+      status: "error",
+      error: args.error,
+      finishedAt: args.finishedAt ?? Date.now(),
+    } as never);
+    return { success: true as const, runId: args.runId };
   },
 });
 
@@ -335,7 +517,7 @@ export const seedDefaultAgentDataIfEmpty = mutation({
           ...config,
           updatedAt: config.lastEditedAt ?? timestamp,
           updatedBy: config.lastEditedBy,
-        }) as any);
+        }) as never);
       }
       seededConfigs = defaultAgentConfigs.length;
     }
