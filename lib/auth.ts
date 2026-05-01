@@ -2,12 +2,30 @@ import type { NavCategory } from "@/lib/navigation";
 
 export type UserRole = "admin" | "operator" | "bari" | "blue" | "viewer";
 
+/**
+ * When true, every signed-in user is treated as having operator-grade access for
+ * `canAccessPath`, `filterNavGroupsForRole`, `canApproveReviewItem`, and UI gates
+ * that receive the effective role from `effectiveRoleForSignedInUser`.
+ * Set to false to restore Clerk/metadata role enforcement.
+ */
+export const FULL_ACCESS_FOR_ALL_SIGNED_IN_USERS = true;
+
 const validRoles = new Set<UserRole>(["admin", "operator", "bari", "blue", "viewer"]);
 
 export function normalizeUserRole(value: unknown, fallback: UserRole = "operator"): UserRole {
   if (typeof value !== "string") return fallback;
   const normalized = value.trim().toLowerCase();
   return validRoles.has(normalized as UserRole) ? (normalized as UserRole) : fallback;
+}
+
+/**
+ * Maps Clerk-stored role to the role used for routing and permission helpers.
+ * Persist `storedRole` from metadata/Convex; use this result for gates and labels via {@link roleLabel}.
+ */
+export function effectiveRoleForSignedInUser(storedRole: UserRole, isSignedIn: boolean): UserRole {
+  if (!FULL_ACCESS_FOR_ALL_SIGNED_IN_USERS || !isSignedIn) return storedRole;
+  if (storedRole === "admin") return "admin";
+  return "operator";
 }
 
 export function defaultRoleForEnvironment() {

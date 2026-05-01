@@ -7,7 +7,10 @@ export type AppUserState = {
   clerkConfigured: boolean;
   isLoaded: boolean;
   isSignedIn: boolean;
+  /** Role used for nav, route access, and approvals (may reflect full-access override). */
   role: UserRole;
+  /** Role from Clerk metadata / Convex profile; use when re-enforcing fine-grained roles. */
+  storedRole: UserRole;
   displayName: string;
   email: string | null;
   clerkUserId: string | null;
@@ -19,6 +22,7 @@ const defaultAppUserState: AppUserState = {
   isLoaded: true,
   isSignedIn: true,
   role: "operator",
+  storedRole: "operator",
   displayName: "Demo Operator",
   email: null,
   clerkUserId: null,

@@ -4,7 +4,14 @@ import { useEffect, useMemo } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useUser } from "@clerk/nextjs";
 import { api } from "@/convex/_generated/api";
-import { defaultRoleForEnvironment, displayNameFromUser, initialsFromUser, normalizeUserRole, type UserRole } from "@/lib/auth";
+import {
+  defaultRoleForEnvironment,
+  displayNameFromUser,
+  effectiveRoleForSignedInUser,
+  initialsFromUser,
+  normalizeUserRole,
+  type UserRole,
+} from "@/lib/auth";
 
 export function useCurrentAppUser() {
   const { isLoaded, isSignedIn, user } = useUser();
@@ -13,7 +20,8 @@ export function useCurrentAppUser() {
 
   const metadataRole = normalizeUserRole((user?.publicMetadata?.role as string | undefined) ?? undefined, defaultRoleForEnvironment());
   const profileRole = normalizeUserRole(profile?.roles?.[0], metadataRole);
-  const role: UserRole = profileRole || metadataRole;
+  const storedRole: UserRole = profileRole || metadataRole;
+  const role: UserRole = effectiveRoleForSignedInUser(storedRole, Boolean(isSignedIn));
   const displayName = displayNameFromUser(user?.fullName, user?.primaryEmailAddress?.emailAddress);
   const email = user?.primaryEmailAddress?.emailAddress ?? profile?.email ?? null;
   const avatarInitials = useMemo(
@@ -27,16 +35,17 @@ export function useCurrentAppUser() {
       clerkUserId: user.id,
       email: user.primaryEmailAddress?.emailAddress,
       name: displayName,
-      role,
+      role: storedRole,
     }).catch(() => {
       // Auth scaffolding should not block the rest of the console.
     });
-  }, [displayName, isLoaded, isSignedIn, role, upsertProfile, user?.id, user?.primaryEmailAddress?.emailAddress]);
+  }, [displayName, isLoaded, isSignedIn, storedRole, upsertProfile, user?.id, user?.primaryEmailAddress?.emailAddress]);
 
   return {
     isLoaded,
     isSignedIn,
     role,
+    storedRole,
     displayName,
     email,
     clerkUserId: user?.id ?? null,
