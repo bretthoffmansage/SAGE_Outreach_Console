@@ -394,6 +394,7 @@ function ShellFrame({
                       {notifications === undefined ? (
                         <p className="rounded-lg border border-dashed border-slate-800 bg-slate-950/80 px-3 py-5 text-sm text-slate-400">Loading notifications...</p>
                       ) : allowedNotifications.length ? (
+                        <div className="max-h-[420px] overflow-y-auto overscroll-contain">
                         <div className="space-y-2">
                           {allowedNotifications.map((notification: { notificationId: string; title: string; description: string; sourceRoute: string }) => (
                             <button
@@ -412,6 +413,7 @@ function ShellFrame({
                               <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-500" />
                             </button>
                           ))}
+                        </div>
                         </div>
                       ) : (
                         <p className="rounded-lg border border-dashed border-slate-800 bg-slate-950/80 px-3 py-5 text-sm text-slate-400">No notifications.</p>
