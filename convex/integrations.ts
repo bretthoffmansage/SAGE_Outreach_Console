@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { integrations as demoIntegrations } from "../lib/data/demo-data";
+import { metaIntegrationConnections } from "../lib/meta-integration-seeds";
 
 const integrationStatus = v.union(v.literal("connected"), v.literal("disconnected"), v.literal("missing_credentials"), v.literal("manual_mode"), v.literal("error"), v.literal("demo_fallback"), v.literal("not_configured"));
 
@@ -25,6 +26,14 @@ const integrationPatchValidator = v.object({
   sortOrder: v.optional(v.number()),
   lastSync: v.optional(v.number()),
   notes: v.optional(v.string()),
+  connectorMode: v.optional(v.string()),
+  safetyLevel: v.optional(v.string()),
+  plannedCapabilities: v.optional(v.array(v.string())),
+  disabledCapabilities: v.optional(v.array(v.string())),
+  relatedWorkflows: v.optional(v.string()),
+  requiredScopes: v.optional(v.string()),
+  configuredScopes: v.optional(v.string()),
+  errorMessage: v.optional(v.string()),
 });
 
 function stripSystemFields<T extends Record<string, unknown>>(record: T | null | undefined) {
@@ -60,6 +69,14 @@ function sanitizeIntegrationRecord(record: Record<string, unknown>) {
     updatedAt: record.updatedAt,
     lastSync: record.lastSync,
     notes: record.notes,
+    connectorMode: record.connectorMode,
+    safetyLevel: record.safetyLevel,
+    plannedCapabilities: record.plannedCapabilities,
+    disabledCapabilities: record.disabledCapabilities,
+    relatedWorkflows: record.relatedWorkflows,
+    requiredScopes: record.requiredScopes,
+    configuredScopes: record.configuredScopes,
+    errorMessage: record.errorMessage,
   } satisfies Record<string, unknown>;
 
   return Object.fromEntries(Object.entries(next).filter(([, value]) => value !== undefined));
@@ -70,7 +87,8 @@ function sortByOrder(left: { sortOrder: number; updatedAt: number }, right: { so
   return right.updatedAt - left.updatedAt;
 }
 
-function seedPayload(item: (typeof demoIntegrations)[number]) {
+function seedPayload(item: (typeof demoIntegrations)[number] | (typeof metaIntegrationConnections)[number]) {
+  const extra = item as Record<string, unknown>;
   return sanitizeIntegrationRecord({
     integrationId: item.id,
     name: item.name,
@@ -95,6 +113,14 @@ function seedPayload(item: (typeof demoIntegrations)[number]) {
     updatedAt: Date.parse(item.updatedAt),
     lastSync: item.lastSync ? Date.parse(item.lastSync) : undefined,
     notes: item.notes,
+    connectorMode: extra.connectorMode,
+    safetyLevel: extra.safetyLevel,
+    plannedCapabilities: extra.plannedCapabilities,
+    disabledCapabilities: extra.disabledCapabilities,
+    relatedWorkflows: extra.relatedWorkflows,
+    requiredScopes: extra.requiredScopes,
+    configuredScopes: extra.configuredScopes,
+    errorMessage: extra.errorMessage,
   });
 }
 
@@ -141,11 +167,11 @@ export const seedDefaultIntegrationRecordsIfEmpty = mutation({
     const existing = await ctx.db.query("integrationConnections").collect();
     if (existing.length) return { seeded: false, inserted: 0 };
 
-    for (const item of demoIntegrations) {
+    for (const item of [...demoIntegrations, ...metaIntegrationConnections]) {
       await ctx.db.insert("integrationConnections", seedPayload(item) as never);
     }
 
-    return { seeded: true, inserted: demoIntegrations.length };
+    return { seeded: true, inserted: demoIntegrations.length + metaIntegrationConnections.length };
   },
 });
 
@@ -271,5 +297,73 @@ export const updateIntegrationNotes = mutation({
       updatedAt: Date.now(),
     }) as never);
     return { success: true as const, integrationId: args.integrationId };
+  },
+});
+
+const META_INTEGRATION_IDS = new Set(["meta_platform", "meta_ads", "instagram", "facebook", "meta_connector_mcp"]);
+
+/** Inserts Meta-related integration rows when missing (for Convex DBs seeded before Section 10). */
+export const seedMetaIntegrationRecordsIfMissing = mutation({
+  args: {},
+  handler: async (ctx) => {
+    let inserted = 0;
+    for (const item of metaIntegrationConnections) {
+      const ex = await ctx.db.query("integrationConnections").withIndex("by_integration_id", (q) => q.eq("integrationId", item.id)).unique();
+      if (ex) continue;
+      await ctx.db.insert("integrationConnections", seedPayload(item) as never);
+      inserted += 1;
+    }
+    return { inserted };
+  },
+});
+
+/**
+ * Dry-run readiness: reads Convex integration rows and env key presence only.
+ * Does not call Meta APIs or expose secret values.
+ */
+export const runMetaConnectorReadinessCheck = mutation({
+  args: { integrationId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query("integrationConnections").collect();
+    const targets = rows.filter((r) => {
+      if (!META_INTEGRATION_IDS.has(r.integrationId)) return false;
+      if (args.integrationId && r.integrationId !== args.integrationId) return false;
+      return true;
+    });
+
+    const missingSetupItems: string[] = [];
+    const configuredItems: string[] = [];
+
+    for (const row of targets) {
+      const keys = row.envKeys ?? [];
+      if (!keys.length) {
+        missingSetupItems.push(`${row.name}: no env keys configured for automated presence scan.`);
+        continue;
+      }
+      for (const key of keys) {
+        if (process.env[key]) configuredItems.push(`${key} (present)`);
+        else missingSetupItems.push(`${key} (missing)`);
+      }
+    }
+
+    const summary =
+      targets.length === 0
+        ? "No Meta integration rows found. Run seed Meta integrations from Operations or redeploy Convex seeds."
+        : "Meta Connector readiness check completed in dry-run mode. No external Meta API call was made. Current mode is planned/read-only future. Missing setup typically includes app credentials, business account mapping, and approved read scopes. Write actions remain disabled.";
+
+    return {
+      status: "dry_run_complete" as const,
+      mode: "dry_run" as const,
+      safetyLevel: "no_write_actions" as const,
+      targetsChecked: targets.map((t) => t.integrationId),
+      missingSetupItems,
+      configuredItems,
+      warnings: [
+        "Demo and manual performance data must stay labeled — do not treat as verified live analytics.",
+        "OAuth, webhooks, and token validation against Meta are not implemented in this pass.",
+      ],
+      noExternalCallNotice: "No external Meta API call was made from Outreach Console.",
+      summary,
+    };
   },
 });

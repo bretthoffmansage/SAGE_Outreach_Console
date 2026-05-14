@@ -3,11 +3,16 @@
 import { api } from "@/convex/_generated/api";
 import { useAction, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Braces, ChevronLeft, GitBranch, RotateCcw, Save, ShieldAlert, Sparkles } from "lucide-react";
+import { type ReactNode, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Braces, ChevronLeft, RotateCcw, Save, ShieldAlert, Sparkles } from "lucide-react";
 import { defaultAgentConfigs, getDefaultAgentConfig } from "@/lib/agent-config";
-import { agentRunSteps, campaigns, learningInsights, performanceSnapshots } from "@/lib/data/demo-data";
+import { COPY_INTELLIGENCE_PLANNED_LAYER_NAMES, intelligenceGroupLabelForAgentId, INTELLIGENCE_HUB_CARDS } from "@/lib/intelligence-groups";
+import { agentRunSteps, campaigns, learningInsights } from "@/lib/data/demo-data";
 import type { AgentConfigRecord } from "@/lib/domain";
+import { CopyIntelligenceSection } from "@/components/copy-intelligence-section";
+import { TrendIntelligenceSection } from "@/components/trend-intelligence-section";
+import { PerformanceIntelligenceSection } from "@/components/performance-intelligence-section";
+import { PlatformConnectorIntelligenceSection } from "@/components/platform-connector-intelligence-section";
 import { useAppUser } from "@/components/auth/app-user-context";
 import { cn } from "@/lib/utils";
 import {
@@ -288,9 +293,9 @@ export function AgentRunsSection() {
   return (
     <div className="space-y-5">
       <SectionHeader
-        eyebrow="OPERATIONAL LOG"
+        eyebrow="Launch intelligence"
         title="Agent Runs"
-        description="Inspect current and historical agent executions, pauses, blockers, and structured outputs."
+        description="Review dry-run and configured agent activity across copy workflows, campaign heartbeat signals, production bridge prep, response analysis, performance views, and learning loops — traces are illustrative until live execution is connected."
       />
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <ControlPanel className="p-3"><p className="text-xs uppercase tracking-[0.16em] text-slate-400">Total runs</p><p className="mt-1 text-xl font-semibold text-slate-100">{summaryStats.total}</p></ControlPanel>
@@ -351,7 +356,7 @@ export function LangGraphSection() {
   const [isWorking, setIsWorking] = useState(false);
   const seedAttemptedRef = useRef(false);
 
-  const agentConfigs = useQuery(api.agents.listAgentConfigs);
+  const agentConfigs = useQuery(api.agents.listAgentConfigs, {});
   const runtimeStates = useQuery(api.agents.listAgentRuntimeStates);
   const selectedRuns = useQuery(
     api.agents.listAgentRunsByAgentId,
@@ -410,6 +415,13 @@ export function LangGraphSection() {
     () => [...Object.values(effectiveConfigMap)].sort((left, right) => left.workflowOrder - right.workflowOrder),
     [effectiveConfigMap],
   );
+  const intelligenceGroupsOnGraph = useMemo(() => {
+    const labels = new Set<string>();
+    for (const cfg of orderedConfigs) {
+      labels.add(intelligenceGroupLabelForAgentId(cfg.agentId));
+    }
+    return [...labels].sort((a, b) => a.localeCompare(b));
+  }, [orderedConfigs]);
 
   const selectedConfig = selectedAgentId ? effectiveConfigMap[selectedAgentId] ?? null : null;
   const selectedRuntime: AgentRuntimeRecord | null = selectedAgentId ? runtimeMap[selectedAgentId] ?? null : null;
@@ -510,7 +522,11 @@ export function LangGraphSection() {
   if (agentConfigs === undefined || runtimeStates === undefined || (selectedAgentId && selectedRuns === undefined)) {
     return (
       <div className="space-y-5">
-        <SectionHeader eyebrow="Active Agents" title="Active Agents" />
+        <SectionHeader
+          eyebrow="Copy Intelligence"
+          title="Active Agents & LangGraph"
+          description="Multi-agent copy and coordination graph — configurable, dry-run friendly, human approval first. Loading agent configs from Convex."
+        />
         <ControlPanel className="p-4">
           <p className="text-sm text-slate-300">Loading agent configs from Convex.</p>
         </ControlPanel>
@@ -521,7 +537,11 @@ export function LangGraphSection() {
   if (!orderedConfigs.length) {
     return (
       <div className="space-y-5">
-        <SectionHeader eyebrow="Active Agents" title="Active Agents" />
+        <SectionHeader
+          eyebrow="Copy Intelligence"
+          title="Active Agents & LangGraph"
+          description="Multi-agent copy and coordination graph — configurable, dry-run friendly, human approval first."
+        />
         <ControlPanel className="p-4">
           <p className="text-sm text-slate-300">Seeding default agent configs.</p>
         </ControlPanel>
@@ -553,7 +573,10 @@ export function LangGraphSection() {
               Back to LangGraph map
             </button>
             <div>
-              <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">{selectedConfig.category}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge tone="blue">{intelligenceGroupLabelForAgentId(activeAgentId)}</StatusBadge>
+                <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-500">Category · {selectedConfig.category}</p>
+              </div>
               <div className="mt-2 flex flex-wrap items-center gap-3">
                 <h2 className="text-2xl font-semibold tracking-tight text-slate-50 md:text-3xl">{selectedConfig.displayName}</h2>
                 <StatusBadge tone={tone(selectedRuntime.status)}>{statusLabel(selectedRuntime.status)}</StatusBadge>
@@ -683,6 +706,10 @@ export function LangGraphSection() {
                   <div className="flex items-center justify-between gap-3"><span>Agent enabled</span><span className="text-slate-100">{selectedConfig.enabled ? "Yes" : "No"}</span></div>
                   <div className="flex items-center justify-between gap-3"><span>Workflow order</span><span className="text-slate-100">{selectedConfig.workflowOrder}</span></div>
                   <div className="flex items-center justify-between gap-3"><span>Category</span><span className="text-slate-100">{selectedConfig.category}</span></div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Intelligence area (UI)</span>
+                    <span className="text-right text-slate-100">{intelligenceGroupLabelForAgentId(activeAgentId)}</span>
+                  </div>
                 </div>
               </ControlPanel>
             </div>
@@ -938,7 +965,29 @@ export function LangGraphSection() {
 
   return (
     <div className="space-y-5">
-      <SectionHeader eyebrow="Active Agents" title="Active Agents" />
+      <SectionHeader
+        eyebrow="Copy Intelligence"
+        title="Active Agents & LangGraph"
+        description="Turns source assets, audience context, voice rules, offer strategy, hooks, and human edits into stronger campaign copy — not autonomous; no auto-send or auto-post. Other intelligence areas (heartbeat, production bridge, trends, performance, learning) connect as you wire them."
+      />
+      <ControlPanel className="p-3">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Intelligence groups on this map</p>
+        <p className="mt-2 text-sm leading-6 text-slate-300">
+          {intelligenceGroupsOnGraph.length ? intelligenceGroupsOnGraph.join(" · ") : "No agents loaded."}
+        </p>
+      </ControlPanel>
+      <details className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950/60">
+        <summary className="cursor-pointer list-none px-3 py-2.5 text-sm font-semibold text-slate-200 marker:content-none hover:bg-slate-900/70 [&::-webkit-details-marker]:hidden">
+          Copy Intelligence — planned agent layers <span className="font-normal text-slate-500">(roadmap; not all are live nodes)</span>
+        </summary>
+        <div className="border-t border-slate-800 px-3 py-3">
+          <ul className="grid gap-1 text-xs leading-5 text-slate-400 sm:grid-cols-2">
+            {COPY_INTELLIGENCE_PLANNED_LAYER_NAMES.map((name) => (
+              <li key={name}>· {name}</li>
+            ))}
+          </ul>
+        </div>
+      </details>
       <ControlPanel className="p-4">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {orderedConfigs.map((config, index) => {
@@ -965,6 +1014,7 @@ export function LangGraphSection() {
                   actionLabel="Configure"
                   clickable
                   currentTaskLabel={runtime?.currentTaskLabel}
+                  groupLabel={intelligenceGroupLabelForAgentId(config.agentId)}
                   isRunning={runtime?.isRunning}
                   label={config.displayName}
                   meta={index < orderedConfigs.length - 1 ? `Next: ${nextLabel}` : nextLabel}
@@ -979,7 +1029,9 @@ export function LangGraphSection() {
       <ControlPanel className="p-4">
         <div className="flex items-start gap-3">
           <ShieldAlert className="mt-0.5 h-4 w-4 text-amber-300" />
-          <p className="text-sm leading-6 text-slate-300">Human approval remains authoritative between Approval Router and Keap/Zapier Prep. Any high-risk claims, founder voice work, or blocked rules pause the flow here.</p>
+          <p className="text-sm leading-6 text-slate-300">
+            Human approval remains authoritative between Approval Router and Keap/Zapier Prep. High-risk claims, founder voice work, or blocked rules pause the flow here — agents suggest and structure; operators decide. Chains are configurable and dry-run until you intentionally enable live execution.
+          </p>
         </div>
       </ControlPanel>
     </div>
@@ -1055,7 +1107,7 @@ export function ResponsesSection() {
       <SectionHeader
         eyebrow="Signal monitor"
         title="Response Intelligence"
-        description="Monitor inbound replies, urgency, sentiment, match confidence, and manual reply posture. No auto-send in MVP."
+        description="Classify inbound replies against campaigns, triage urgency and sentiment, and keep suggested replies in draft-only mode — manual review first; no auto-send or auto-post."
       />
       <div className="flex flex-wrap gap-2">
         {responseQueues.map((queue, index) => (
@@ -1202,100 +1254,162 @@ export function ResponsesSection() {
   );
 }
 
-export function PerformanceSection() {
-  const telemetry = performanceSnapshots.reduce(
-    (accumulator, snapshot) => ({
-      sent: accumulator.sent + snapshot.sent,
-      delivered: accumulator.delivered + snapshot.delivered,
-      replies: accumulator.replies + snapshot.replies,
-      conversions: accumulator.conversions + snapshot.conversions,
-      openRateWeightedSum: accumulator.openRateWeightedSum + snapshot.openRate * snapshot.sent,
-      clickRateWeightedSum: accumulator.clickRateWeightedSum + snapshot.clickRate * snapshot.sent,
-    }),
-    { sent: 0, delivered: 0, replies: 0, conversions: 0, openRateWeightedSum: 0, clickRateWeightedSum: 0 },
-  );
-  const openRate = telemetry.sent ? Math.round((telemetry.openRateWeightedSum / telemetry.sent) * 100) : 0;
-  const clickRate = telemetry.sent ? Math.round((telemetry.clickRateWeightedSum / telemetry.sent) * 100) : 0;
+export function HeartbeatHistorySection() {
+  const rows = useQuery(api.heartbeat.listHeartbeatChecks, { limit: 25 });
+
+  const toneForHb = (s: string) => {
+    if (s === "clear") return "green";
+    if (s === "blocked") return "red";
+    if (s === "at_risk") return "amber";
+    if (s === "no_active_campaign") return "gray";
+    return "blue";
+  };
 
   return (
     <div className="space-y-5">
       <SectionHeader
-        eyebrow="Telemetry"
-        title="Performance"
-        description="Campaign outcomes, offer performance, response signals, and learning candidates in one telemetry view."
+        eyebrow="Campaign Heartbeat"
+        title="Heartbeat check history"
+        description="Audit trail from deterministic Weekly Launch Packet checks. No external calls — tasks sync to Today Tasks on Home."
       />
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-        <ControlPanel className="p-3"><p className="text-xs uppercase tracking-[0.16em] text-slate-400">Sent</p><p className="mt-1 text-xl font-semibold text-slate-100">{telemetry.sent}</p></ControlPanel>
-        <ControlPanel className="p-3"><p className="text-xs uppercase tracking-[0.16em] text-slate-400">Delivered</p><p className="mt-1 text-xl font-semibold text-slate-100">{telemetry.delivered}</p></ControlPanel>
-        <ControlPanel className="p-3"><p className="text-xs uppercase tracking-[0.16em] text-slate-400">Open rate</p><p className="mt-1 text-xl font-semibold text-sky-200">{openRate}%</p></ControlPanel>
-        <ControlPanel className="p-3"><p className="text-xs uppercase tracking-[0.16em] text-slate-400">Click rate</p><p className="mt-1 text-xl font-semibold text-sky-200">{clickRate}%</p></ControlPanel>
-        <ControlPanel className="p-3"><p className="text-xs uppercase tracking-[0.16em] text-slate-400">Replies</p><p className="mt-1 text-xl font-semibold text-amber-200">{telemetry.replies}</p></ControlPanel>
-        <ControlPanel className="p-3"><p className="text-xs uppercase tracking-[0.16em] text-slate-400">Conversions</p><p className="mt-1 text-xl font-semibold text-emerald-200">{telemetry.conversions}</p></ControlPanel>
-        <ControlPanel className="p-3"><p className="text-xs uppercase tracking-[0.16em] text-slate-400">Learning candidates</p><p className="mt-1 text-xl font-semibold text-violet-200">{learningInsights.length}</p></ControlPanel>
-      </section>
-      <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <ConsoleTable>
-          <TableHead>
-            <tr>
-              <Th>Campaign</Th>
-              <Th>Sent</Th>
-              <Th>Delivered</Th>
-              <Th>Open rate</Th>
-              <Th>Click rate</Th>
-              <Th>Replies</Th>
-              <Th>Conversions</Th>
-              <Th>Signal</Th>
-            </tr>
-          </TableHead>
-          <tbody>
-            {performanceSnapshots.map((snapshot) => {
-              const campaign = campaigns.find((item) => item.id === snapshot.campaignId);
-              return (
-                <tr key={snapshot.id}>
-                  <Td>{campaign?.name}</Td>
-                  <Td>{snapshot.sent}</Td>
-                  <Td>{snapshot.delivered}</Td>
-                  <Td>{Math.round(snapshot.openRate * 100)}%</Td>
-                  <Td>{Math.round(snapshot.clickRate * 100)}%</Td>
-                  <Td>{snapshot.replies}</Td>
-                  <Td>{snapshot.conversions}</Td>
-                  <Td className="min-w-[16rem] max-w-[22rem] whitespace-normal text-slate-300">{snapshot.summary}</Td>
+      <ControlPanel className="p-4">
+        {rows === undefined ? (
+          <p className="text-sm text-slate-400">Loading…</p>
+        ) : !rows.length ? (
+          <p className="text-sm text-slate-400">No heartbeat checks recorded yet. Run Campaign Heartbeat from Home.</p>
+        ) : (
+          <ConsoleTable>
+            <TableHead>
+              <tr>
+                <Th>Date</Th>
+                <Th>Type</Th>
+                <Th>Campaign</Th>
+                <Th>Status</Th>
+                <Th>Checkpoint</Th>
+                <Th>Summary</Th>
+                <Th>Tasks</Th>
+              </tr>
+            </TableHead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.checkId}>
+                  <Td>{r.checkDate}</Td>
+                  <Td className="text-xs text-slate-400">{r.checkType}</Td>
+                  <Td>{r.campaignName}</Td>
+                  <Td>
+                    <StatusBadge tone={toneForHb(r.status)}>{r.status.replace(/_/g, " ")}</StatusBadge>
+                  </Td>
+                  <Td className="max-w-[11rem] whitespace-normal text-xs">{r.currentCheckpoint}</Td>
+                  <Td className="max-w-[26rem] whitespace-normal text-sm text-slate-300">{r.summary}</Td>
+                  <Td className="text-xs text-slate-400">
+                    +{r.createdTaskIds.length} new · {r.updatedTaskIds.length} updated
+                  </Td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </ConsoleTable>
-        <QueueLane title="Learning Candidates" count={learningInsights.length} tone="purple" subtitle="Review before making guidance authoritative.">
-          <SignalList items={learningInsights.map((item) => ({ label: item.title, value: `${Math.round(item.confidence * 100)}%`, tone: item.status === "candidate" ? "amber" : "green", detail: item.summary }))} />
-        </QueueLane>
-      </section>
+              ))}
+            </tbody>
+          </ConsoleTable>
+        )}
+      </ControlPanel>
+      <div className="flex flex-wrap gap-2">
+        <Link href="/dashboard">
+          <Button variant="secondary">Home — run heartbeat</Button>
+        </Link>
+        <Link href="/intelligence">
+          <Button variant="ghost">Intelligence hub</Button>
+        </Link>
+      </div>
     </div>
   );
 }
 
 export function IntelligenceRouteSection({ slug }: { slug?: string[] }) {
+  if (slug?.[1] === "heartbeat") return <HeartbeatHistorySection />;
   if (slug?.[1] === "langgraph") return <LangGraphSection />;
+  if (slug?.[1] === "copy") {
+    return (
+      <Suspense fallback={<div className="rounded-xl border border-slate-800 bg-slate-950/60 p-6 text-sm text-slate-400">Loading Copy Intelligence…</div>}>
+        <CopyIntelligenceSection />
+      </Suspense>
+    );
+  }
+  if (slug?.[1] === "trends") {
+    return (
+      <Suspense fallback={<div className="rounded-xl border border-slate-800 bg-slate-950/60 p-6 text-sm text-slate-400">Loading Trend Intelligence…</div>}>
+        <TrendIntelligenceSection />
+      </Suspense>
+    );
+  }
   if (slug?.[1] === "agent-runs") return <AgentRunsSection />;
   if (slug?.[1] === "responses") return <ResponsesSection />;
-  if (slug?.[1] === "performance") return <PerformanceSection />;
+  if (slug?.[1] === "performance") {
+    return (
+      <Suspense fallback={<div className="rounded-xl border border-slate-800 bg-slate-950/60 p-6 text-sm text-slate-400">Loading Performance Intelligence…</div>}>
+        <PerformanceIntelligenceSection />
+      </Suspense>
+    );
+  }
+  if (slug?.[1] === "platform-connector") {
+    return (
+      <Suspense
+        fallback={<div className="rounded-xl border border-slate-800 bg-slate-950/60 p-6 text-sm text-slate-400">Loading Platform Connector Intelligence…</div>}
+      >
+        <PlatformConnectorIntelligenceSection />
+      </Suspense>
+    );
+  }
 
   return (
     <div className="space-y-5">
-      <SectionHeader eyebrow="Intelligence" title="Intelligence Hub" description="Open the signal monitor, telemetry, agent runs, or LangGraph map." />
-      <section className="grid gap-4 md:grid-cols-2">
-        <ControlPanel className="p-4">
-          <GitBranch className="h-5 w-5 text-sky-300" />
-          <h3 className="mt-3 text-lg font-semibold text-slate-100">LangGraph Map</h3>
-          <p className="mt-2 text-sm text-slate-300">Visual workflow lanes and human approval pauses.</p>
-          <div className="mt-4"><Link href="/intelligence/langgraph"><Button variant="secondary">Open workflow</Button></Link></div>
-        </ControlPanel>
-        <ControlPanel className="p-4">
-          <Bot className="h-5 w-5 text-violet-300" />
-          <h3 className="mt-3 text-lg font-semibold text-slate-100">Agent Runs</h3>
-          <p className="mt-2 text-sm text-slate-300">Roster, structured output snapshots, and blockers.</p>
-          <div className="mt-4"><Link href="/intelligence/agent-runs"><Button variant="secondary">Open runs</Button></Link></div>
-        </ControlPanel>
+      <SectionHeader
+        eyebrow="Intelligence"
+        title="Intelligence hub"
+        description="Weekly launch and marketing coordination intelligence: copy agents, heartbeat planning, production bridge references, trend research (future), performance patterns, and learning loops — mostly configurable and dry-run until you wire live systems."
+      />
+      <section className="grid gap-3 lg:grid-cols-3">
+        {INTELLIGENCE_HUB_CARDS.map((card) => (
+          <Link
+            className={cn("focus-ring block rounded-xl", card.emphasis ? "lg:col-span-2" : "")}
+            href={card.href}
+            key={card.id}
+          >
+            <ControlPanel
+              className={cn(
+                "h-full p-4 transition hover:border-slate-600",
+                card.emphasis ? "border-sky-500/30 bg-slate-950/85" : "",
+              )}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-lg font-semibold text-slate-100">{card.title}</h3>
+                {card.emphasis ? <StatusBadge tone="blue">Core</StatusBadge> : <StatusBadge tone="gray">Area</StatusBadge>}
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-300">{card.description}</p>
+              {card.plannedNote ? <p className="mt-2 text-xs text-slate-500">{card.plannedNote}</p> : null}
+              <p className="mt-3 text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">Open linked surface</p>
+            </ControlPanel>
+          </Link>
+        ))}
       </section>
+      <ControlPanel className="p-4">
+        <p className="text-sm font-semibold text-slate-100">Intelligence routes</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link href="/intelligence/trends">
+            <Button variant="secondary">Trend Intelligence</Button>
+          </Link>
+          <Link href="/intelligence/copy">
+            <Button variant="secondary">Copy Intelligence</Button>
+          </Link>
+          <Link href="/intelligence/heartbeat">
+            <Button variant="secondary">Campaign Heartbeat</Button>
+          </Link>
+          <Link href="/intelligence/langgraph"><Button variant="secondary">LangGraph Map</Button></Link>
+          <Link href="/intelligence/agent-runs"><Button variant="secondary">Agent Runs</Button></Link>
+          <Link href="/intelligence/responses"><Button variant="secondary">Response Intelligence</Button></Link>
+          <Link href="/intelligence/performance"><Button variant="secondary">Performance Intelligence</Button></Link>
+          <Link href="/intelligence/platform-connector">
+            <Button variant="secondary">Platform Connector Intelligence</Button>
+          </Link>
+        </div>
+      </ControlPanel>
     </div>
   );
 }

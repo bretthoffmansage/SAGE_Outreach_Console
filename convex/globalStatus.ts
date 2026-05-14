@@ -1,4 +1,6 @@
 import { query } from "./_generated/server";
+import type { LibraryItem } from "../lib/domain";
+import { libraryItemHref, librarySearchCategory } from "../lib/library-routes";
 
 type ApprovalItemRecord = {
   approvalId: string;
@@ -57,39 +59,35 @@ type AgentRuntimeStateRecord = {
   updatedAt: number;
 };
 
+function libraryDocToSearchItem(item: {
+  recordId: string;
+  name: string;
+  type: string;
+  status: string;
+  summary: string;
+  tags: string[];
+  riskLevel?: LibraryItem["riskLevel"];
+  bucket?: string;
+  title?: string;
+}): LibraryItem {
+  return {
+    id: item.recordId,
+    type: item.type,
+    name: item.name,
+    status: item.status,
+    summary: item.summary,
+    tags: item.tags,
+    riskLevel: item.riskLevel,
+    bucket: item.bucket,
+    title: item.title,
+  };
+}
+
 function hrefForApprovalOwner(owner: string) {
   if (owner === "bari") return "/reviews/bari";
   if (owner === "blue") return "/reviews/blue";
   if (owner === "internal") return "/reviews/internal";
   return "/reviews/all";
-}
-
-function categoryForLibraryType(type: string) {
-  const labels: Record<string, string> = {
-    offer: "Offer",
-    lead_magnet: "Lead Magnet",
-    email: "Email Library",
-    voice_rule: "Bari Voice Rule",
-    signoff: "Sign-off",
-    audience: "Audience",
-    compliance_rule: "Compliance Rule",
-    learning: "Learning Item",
-  };
-  return labels[type] ?? "Library Item";
-}
-
-function hrefForLibraryType(type: string) {
-  const hrefs: Record<string, string> = {
-    offer: "/libraries/offers",
-    lead_magnet: "/libraries/offers",
-    email: "/libraries/email",
-    voice_rule: "/libraries/voice-rules",
-    signoff: "/libraries/signoffs",
-    audience: "/libraries/audiences",
-    compliance_rule: "/libraries/compliance",
-    learning: "/libraries/learning",
-  };
-  return hrefs[type] ?? "/libraries/offers";
 }
 
 function riskTone(priority: string) {
@@ -257,16 +255,22 @@ export const getGlobalNotifications = query({
 export const getGlobalSearchRecords = query({
   args: {},
   handler: async (ctx) => {
-    const [campaigns, approvals, tasks, responses, integrations, libraryItems, learningInsights, agentConfigs] = await Promise.all([
-      ctx.db.query("campaigns").collect(),
-      ctx.db.query("approvalItems").collect(),
-      ctx.db.query("todayTasks").collect(),
-      ctx.db.query("responseClassifications").collect(),
-      ctx.db.query("integrationConnections").collect(),
-      ctx.db.query("libraryItems").collect(),
-      ctx.db.query("learningInsights").collect(),
-      ctx.db.query("agentConfigs").collect(),
-    ]);
+    const [campaigns, approvals, tasks, responses, integrations, libraryItems, learningInsights, agentConfigs, productionAssets, trendSignals, performanceSnapshots, performanceReviews, platformInsights] =
+      await Promise.all([
+        ctx.db.query("campaigns").collect(),
+        ctx.db.query("approvalItems").collect(),
+        ctx.db.query("todayTasks").collect(),
+        ctx.db.query("responseClassifications").collect(),
+        ctx.db.query("integrationConnections").collect(),
+        ctx.db.query("libraryItems").collect(),
+        ctx.db.query("learningInsights").collect(),
+        ctx.db.query("agentConfigs").collect(),
+        ctx.db.query("productionAssets").collect(),
+        ctx.db.query("trendSignals").collect(),
+        ctx.db.query("performanceSnapshots").collect(),
+        ctx.db.query("performanceReviews").collect(),
+        ctx.db.query("platformInsights").collect(),
+      ]);
 
     return [
       ...campaigns.map((campaign) => ({
@@ -331,25 +335,28 @@ export const getGlobalSearchRecords = query({
         updatedAt: integration.updatedAt,
         keywords: [integration.category, integration.provider, integration.healthSummary ?? ""],
       })),
-      ...libraryItems.map((item) => ({
-        id: `library:${item.recordId}`,
-        recordId: item.recordId,
-        title: item.name,
-        type: categoryForLibraryType(item.type),
-        description: `${item.status.replace(/_/g, " ")} · ${item.summary}`,
-        route: hrefForLibraryType(item.type),
-        status: item.status,
-        priority: item.riskLevel ?? "gray",
-        updatedAt: item.updatedAt,
-        keywords: [...item.tags, item.type],
-      })),
+      ...libraryItems.map((item) => {
+        const li = libraryDocToSearchItem(item);
+        return {
+          id: `library:${item.recordId}`,
+          recordId: item.recordId,
+          title: item.title ?? item.name,
+          type: librarySearchCategory(li),
+          description: `${item.status.replace(/_/g, " ")} · ${item.summary}`,
+          route: libraryItemHref(li),
+          status: item.status,
+          priority: item.riskLevel ?? "gray",
+          updatedAt: item.updatedAt,
+          keywords: [...item.tags, item.type, item.bucket ?? ""].filter(Boolean),
+        };
+      }),
       ...learningInsights.map((item) => ({
         id: `learning:${item.recordId}`,
         recordId: item.recordId,
         title: item.title,
-        type: "Learning Item",
+        type: "Campaign Learnings",
         description: `${item.status} · ${item.summary}`,
-        route: "/libraries/learning",
+        route: "/libraries/campaign-learnings",
         status: item.status,
         priority: item.confidence >= 0.8 ? "green" : item.confidence >= 0.6 ? "amber" : "gray",
         updatedAt: item.updatedAt,
@@ -361,11 +368,73 @@ export const getGlobalSearchRecords = query({
         title: agent.displayName,
         type: "Agent Config",
         description: `${agent.category} · ${agent.shortDescription}`,
-        route: "/intelligence/langgraph",
+        route: agent.groupId === "platform_connector_intelligence" ? "/intelligence/platform-connector" : "/intelligence/langgraph",
         status: agent.enabled ? "enabled" : "disabled",
         priority: agent.enabled ? "green" : "gray",
         updatedAt: agent.updatedAt,
-        keywords: [agent.agentId, agent.preferredProvider, agent.preferredModel],
+        keywords: [agent.agentId, agent.preferredProvider, agent.preferredModel, agent.groupId ?? ""].filter(Boolean),
+      })),
+      ...productionAssets.map((asset) => ({
+        id: `productionAsset:${asset.productionAssetId}`,
+        productionAssetId: asset.productionAssetId,
+        title: asset.title,
+        type: "Production Asset",
+        description: `${asset.assetType} · ${asset.readinessStatus ?? asset.status} · ${asset.sourceSystem}`,
+        route: "/operations/production-bridge",
+        status: asset.status,
+        priority: asset.readinessStatus === "blocked" || asset.status === "blocked" ? "red" : "gray",
+        updatedAt: asset.updatedAt,
+        keywords: [...(asset.tags ?? []), asset.sourceSystem, asset.assetType, ...(asset.linkedCampaignIds ?? [])],
+      })),
+      ...trendSignals.map((trend) => ({
+        id: `trend:${trend.trendId}`,
+        trendId: trend.trendId,
+        title: trend.title,
+        type: "Trend Intelligence",
+        description: `${trend.platform} · ${trend.trendType ?? "trend"} · ${trend.status} · ${(trend.summary ?? "").slice(0, 120)}`,
+        route: `/intelligence/trends?trend=${encodeURIComponent(trend.trendId)}`,
+        status: trend.status,
+        priority: (trend.riskScore ?? 0) >= 70 ? "red" : (trend.brandFitScore ?? 0) >= 75 ? "green" : "gray",
+        updatedAt: trend.updatedAt,
+        keywords: [...(trend.tags ?? []), trend.platform, trend.trendType ?? ""].filter(Boolean),
+      })),
+      ...performanceSnapshots.map((snap) => ({
+        id: `perfSnap:${snap.snapshotId}`,
+        snapshotId: snap.snapshotId,
+        campaignId: snap.campaignId,
+        title: snap.contentTitle?.trim() || snap.snapshotId,
+        type: "Performance Snapshot",
+        description: `${snap.platform} · ${snap.metricStatus ?? "status unknown"} · ${snap.sourceSystem} · ${(snap.notes ?? "").slice(0, 100)}`,
+        route: `/intelligence/performance?snapshot=${encodeURIComponent(snap.snapshotId)}`,
+        status: snap.metricStatus ?? "unknown",
+        priority: snap.sourceSystem === "demo" ? "amber" : "gray",
+        updatedAt: snap.updatedAt,
+        keywords: [snap.platform, snap.contentType ?? "", snap.sourceSystem, snap.campaignName ?? ""].filter(Boolean),
+      })),
+      ...performanceReviews.map((rev) => ({
+        id: `perfReview:${rev.reviewId}`,
+        reviewId: rev.reviewId,
+        campaignId: rev.campaignId,
+        title: rev.summary?.trim()?.slice(0, 80) || rev.reviewId,
+        type: "Performance Review",
+        description: `${rev.reviewType} · ${rev.status} · ${(rev.summary ?? "").slice(0, 120)}`,
+        route: `/intelligence/performance`,
+        status: rev.status,
+        priority: rev.status === "needs_review" ? "amber" : "gray",
+        updatedAt: rev.updatedAt,
+        keywords: [rev.reviewType, rev.campaignName ?? "", rev.sourceMode ?? ""].filter(Boolean),
+      })),
+      ...platformInsights.map((ins) => ({
+        id: `platformInsight:${ins.insightId}`,
+        insightId: ins.insightId,
+        title: ins.title,
+        type: "Platform Insight",
+        description: `${ins.platform} · ${ins.insightType} · ${ins.status} · ${(ins.summary ?? "").slice(0, 120)}`,
+        route: "/intelligence/platform-connector",
+        status: ins.status,
+        priority: ins.sourceMode === "demo" ? "amber" : "gray",
+        updatedAt: ins.updatedAt,
+        keywords: [ins.platform, ins.sourceSystem, ins.insightType, ins.sourceMode ?? ""].filter(Boolean),
       })),
     ].sort((left, right) => right.updatedAt - left.updatedAt);
   },

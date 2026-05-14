@@ -61,7 +61,9 @@ function Sidebar({ pathname, groups, modeLabel }: { pathname: string; groups: ty
             <StatusDot tone="green" />
           </div>
           <p className="mt-2 text-sm font-semibold text-slate-100">Human approval remains authoritative</p>
-          <p className="mt-1 text-xs leading-5 text-slate-400">Console access is role-aware, with approvals and edits gated by the signed-in user when Clerk is configured.</p>
+          <p className="mt-1 text-xs leading-5 text-slate-400">
+            AI drafts, recommends, and summarizes; humans approve public-facing work. No auto-send or auto-post by default. Access is role-aware when Clerk is configured.
+          </p>
         </div>
       </div>
     </aside>
@@ -130,9 +132,9 @@ function SignInScreen() {
               Auth required
             </Pill>
             <div>
-              <h1 className="text-3xl font-semibold text-slate-50">Sign in to the Outreach Console</h1>
+              <h1 className="text-3xl font-semibold text-slate-50">Sign in to Outreach Console</h1>
               <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">
-                This console now protects campaign, approval, library, response, and integration data behind authenticated access. Sign in with your Clerk account to continue.
+                {appBranding.descriptionLong} Sign in with your Clerk account to continue.
               </p>
             </div>
           </div>
@@ -352,7 +354,7 @@ function ShellFrame({
                   className="focus-ring flex h-10 min-w-[19rem] items-center gap-2 rounded-lg border border-slate-700 bg-slate-950/90 px-3 text-sm text-slate-300"
                 >
                   <Search className="h-4 w-4" />
-                  Search campaigns, rules, replies
+                  Search launch packets, approvals, library…
                 </button>
                 <button type="button" onClick={() => router.push("/reviews/all")} className="focus-ring rounded-lg">
                   <StatusBadge tone={approvalCount > 0 ? "amber" : "gray"}>{`${approvalCount} approval${approvalCount === 1 ? "" : "s"}`}</StatusBadge>
@@ -473,7 +475,7 @@ function ShellFrame({
                 <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-5 py-6 text-rose-100">
                   <p className="text-sm font-semibold">Not authorized</p>
                   <p className="mt-2 text-sm leading-6 text-rose-50/90">
-                    Your current role can&apos;t access this section. Use your allowed review queue or return to the dashboard.
+                    Your current role can&apos;t access this section. Use an allowed review queue or return to Home for launch tasks and coordination.
                   </p>
                   <div className="mt-4 flex gap-2">
                     <button type="button" onClick={() => router.push(fallbackPath)} className="rounded-lg">
@@ -531,7 +533,8 @@ function ShellFrame({
             <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
               <div>
                 <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Command Search</p>
-                <h2 className="mt-2 text-2xl font-semibold text-slate-50">Search campaigns, queues, rules, and replies</h2>
+                <h2 className="mt-2 text-2xl font-semibold text-slate-50">Search across launch coordination</h2>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">{appBranding.description}</p>
               </div>
               <button type="button" onClick={closeSearch} className="focus-ring rounded-md p-1.5 text-slate-400">
                 <X className="h-5 w-5" />
@@ -544,7 +547,7 @@ function ShellFrame({
                   autoFocus
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search campaigns, approvals, replies, offers, tasks, integrations, and agents."
+                  placeholder="Search launch packets, approvals, tasks, responses, library records, integrations, and agents."
                   className="w-full border-0 bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-400"
                 />
               </div>
@@ -552,7 +555,7 @@ function ShellFrame({
             <div className="mt-4 max-h-[65vh] overflow-auto">
               {!query.trim() ? (
                 <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/80 px-5 py-10 text-center text-sm text-slate-400">
-                  Search campaigns, approvals, replies, offers, tasks, integrations, and agents.
+                  Search launch packets, approvals, tasks, responses, library records, integrations, and agents.
                 </div>
               ) : searchRecords === undefined ? (
                 <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/80 px-5 py-10 text-center text-sm text-slate-400">
@@ -600,7 +603,7 @@ function ClerkShell({ children }: { children: ReactNode }) {
     return (
       <div className="min-h-screen bg-[#070d16] px-4 py-8">
         <div className="mx-auto max-w-3xl rounded-2xl border border-slate-800 bg-slate-950/80 px-6 py-10 text-center text-slate-300">
-          Loading authenticated console…
+          Loading Outreach Console…
         </div>
       </div>
     );

@@ -69,6 +69,93 @@ export type Campaign = {
   sortOrder: number;
   archived?: boolean;
   notes?: string;
+
+  /** Weekly Launch Packet fields (Convex-backed; all optional for legacy rows) */
+  campaignKind?: string;
+  launchType?: string;
+  publishDate?: string;
+  prepWeekStart?: string;
+  readinessStatus?: string;
+  sourceProductionAssetId?: string;
+  sourceProductionAssetTitle?: string;
+  sourceProductionAssetUrl?: string;
+  frameIoUrl?: string;
+  muxPlaybackId?: string;
+  transcriptStatus?: string;
+  thumbnailStatus?: string;
+  assetReadinessStatus?: string;
+  relatedShortsNotes?: string;
+  productionNotes?: string;
+  campaignAngle?: string;
+  primaryAudience?: string;
+  youtubeTitle?: string;
+  youtubeDescription?: string;
+  youtubePinnedComment?: string;
+  youtubeScheduledUrl?: string;
+  youtubeScheduledAt?: string;
+  youtubeStatus?: string;
+  youtubeNotes?: string;
+  emailBriefStatus?: string;
+  emailBriefBody?: string;
+  emailBriefSentAt?: string;
+  emailBriefConfirmedAt?: string;
+  emailCtaLink?: string;
+  emailSequenceNotes?: string;
+  emailSubjectIdeas?: string;
+  emailHandoffNotes?: string;
+  creativeOwner?: string;
+  creativeBriefStatus?: string;
+  creativeBriefBody?: string;
+  creativeBriefSentAt?: string;
+  creativeBriefConfirmedAt?: string;
+  shortsStatus?: string;
+  shortFormDeliverablesRequested?: string;
+  shortFormDeliverablesReceived?: string;
+  creativeNotes?: string;
+  socialCopyStatus?: string;
+  rolloutCadenceStatus?: string;
+  metaCaption?: string;
+  metaStatus?: string;
+  facebookCaption?: string;
+  facebookStatus?: string;
+  metaAdsNotes?: string;
+  metaPerformanceNotes?: string;
+  instagramCaption?: string;
+  instagramStatus?: string;
+  tiktokCaption?: string;
+  tiktokStatus?: string;
+  xPost?: string;
+  xStatus?: string;
+  pinterestTitle?: string;
+  pinterestDescription?: string;
+  pinterestStatus?: string;
+  youtubeShortsCaption?: string;
+  youtubeShortsStatus?: string;
+  memeEngagementIdeas?: string;
+  rolloutNotes?: string;
+  heartbeatStatus?: string;
+  heartbeatLastCheckedAt?: number;
+  heartbeatSummary?: string;
+  blockers?: string[];
+  internalNotes?: string;
+  riskNotes?: string;
+  performanceStatus?: string;
+  performanceNotes?: string;
+  performanceSummary?: string;
+  lastPerformanceReviewId?: string;
+  lastPerformanceSnapshotAt?: number;
+  learningNotes?: string;
+  bestHook?: string;
+  bestPlatform?: string;
+  registrationImpactNotes?: string;
+  readinessLastCheckedAt?: number;
+  readinessReasons?: string[];
+  lastCopyRunId?: string;
+  lastCopyRunAt?: number;
+  copyIntelligenceStatus?: string;
+  linkedTrendIds?: string[];
+  trendNotes?: string;
+  trendAdaptationStatus?: string;
 };
 
 export type ApprovalItem = {
@@ -102,9 +189,10 @@ export type ApprovalItem = {
   sortOrder?: number;
 };
 
+/** Legacy Convex values plus extended marketing knowledge types (string for forward compatibility). */
 export type LibraryItem = {
   id: string;
-  type: "offer" | "lead_magnet" | "email" | "voice_rule" | "signoff" | "audience" | "compliance_rule" | "learning";
+  type: string;
   name: string;
   status: string;
   summary: string;
@@ -112,6 +200,49 @@ export type LibraryItem = {
   riskLevel?: RiskLevel;
   /** Optional structured demo metadata for richer Library inspector panels. */
   payload?: Record<string, unknown>;
+  createdAt?: number;
+  updatedAt?: number;
+  bucket?: string;
+  title?: string;
+  sourceSystem?: string;
+  sourceUri?: string;
+  sourceFileId?: string;
+  sourceFolderId?: string;
+  sourceLabel?: string;
+  contentHash?: string;
+  linkedCampaignIds?: string[];
+  linkedAssetIds?: string[];
+  usageRights?: string;
+  confidence?: number;
+  priority?: string;
+  reviewOwner?: string;
+  approvedBy?: string;
+  approvedAt?: number;
+  archivedAt?: number;
+  driveFileId?: string;
+  driveFolderId?: string;
+  driveMimeType?: string;
+  driveWebUrl?: string;
+  driveLastModifiedAt?: number;
+  driveLastSyncedAt?: number;
+  driveSyncStatus?: string;
+  driveFileName?: string;
+  drivePath?: string;
+  driveSyncNotes?: string;
+  obsidianPath?: string;
+  obsidianNoteTitle?: string;
+  obsidianSyncStatus?: string;
+  obsidianLastSyncedAt?: number;
+  obsidianLastExportedAt?: number;
+  obsidianLastPreviewedAt?: number;
+  obsidianFrontmatterJson?: string;
+  obsidianBacklinks?: string[];
+  obsidianTags?: string[];
+  obsidianSyncNotes?: string;
+  lastIndexedAt?: number;
+  lastExportedAt?: number;
+  syncStatus?: string;
+  syncNotes?: string;
 };
 
 export type AgentDefinition = {
@@ -173,6 +304,12 @@ export type AgentConfigRecord = {
   lastEditedBy?: string;
   lastEditedAt: number;
   notes?: string;
+  groupId?: string;
+  agentRole?: string;
+  inputSources?: string[];
+  outputTargets?: string[];
+  safetyMode?: string;
+  isCore?: boolean;
 };
 
 export type AgentRuntimeStateRecord = {
@@ -200,6 +337,14 @@ export type AgentRunRecord = {
   startedAt: number;
   finishedAt?: number;
   error?: string;
+  groupId?: string;
+  runType?: string;
+  outputTarget?: string;
+  safetyMode?: string;
+  appliedToCampaign?: boolean;
+  appliedAt?: number;
+  reviewRequired?: boolean;
+  createdBy?: string;
 };
 
 export type TodayTaskDestinationMode = "campaign" | "review" | "library" | "intelligence" | "operations";
@@ -220,6 +365,20 @@ export type TodayTaskRecord = {
   completedAt?: number;
   sortOrder: number;
   updatedAt: number;
+  dedupeKey?: string;
+  sourceType?: string;
+  campaignId?: string;
+  heartbeatCheckId?: string;
+  ownerLabel?: string;
+  ownerType?: string;
+  dueDate?: string;
+  dueDay?: string;
+  taskRiskLevel?: string;
+  externalDependency?: string;
+  destinationRoute?: string;
+  autoGenerated?: boolean;
+  generatedBy?: string;
+  taskCategory?: string;
 };
 
 export type AgentRunStep = {
@@ -265,6 +424,14 @@ export type IntegrationConnection = {
   updatedAt: string;
   lastSync?: string;
   notes?: string;
+  connectorMode?: string;
+  safetyLevel?: string;
+  plannedCapabilities?: string[];
+  disabledCapabilities?: string[];
+  relatedWorkflows?: string;
+  requiredScopes?: string;
+  configuredScopes?: string;
+  errorMessage?: string;
 };
 
 export type ResponseClassification = {
@@ -313,13 +480,21 @@ export type PerformanceSnapshot = {
 
 export type LearningInsight = {
   id: string;
-  source: "bari_edit" | "blue_decision" | "campaign_performance" | "helpdesk_reply" | "agent_evaluation";
+  source: "bari_edit" | "blue_decision" | "campaign_performance" | "helpdesk_reply" | "agent_evaluation" | "performance_intelligence";
   status: LearningStatus;
   title: string;
   summary: string;
   confidence: number;
   /** Optional structured demo metadata for richer Learning inspector panels. */
   payload?: Record<string, unknown>;
+  createdAt?: number;
+  updatedAt?: number;
+  approvedAt?: number;
+  approvedBy?: string;
+  rejectedAt?: number;
+  rejectedBy?: string;
+  archivedAt?: number;
+  archivedBy?: string;
 };
 
 export type AuditEvent = {

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { defaultAgentConfigs, defaultAgentRuns, defaultAgentRuntimeStates } from "../lib/agent-config";
+import { buildCopyPipelineDryRunOutput } from "../lib/copy-intelligence-dry-run";
 import { buildAgentRuntimeContextPayload } from "./runtime/buildAgentContext";
 
 type AgentRuntimeStatus = "idle" | "ready" | "running" | "human_pause" | "pending" | "blocked" | "complete" | "error";
@@ -74,15 +75,24 @@ function sanitizeAgentConfigForConvex(config: Record<string, unknown>) {
     notes: config.notes,
     updatedAt: config.updatedAt,
     updatedBy: config.updatedBy,
+    groupId: config.groupId,
+    agentRole: config.agentRole,
+    inputSources: config.inputSources,
+    outputTargets: config.outputTargets,
+    safetyMode: config.safetyMode,
+    isCore: config.isCore,
   } satisfies Record<string, unknown>;
 
   return Object.fromEntries(Object.entries(next).filter(([, value]) => value !== undefined));
 }
 
 export const listAgentConfigs = query({
-  args: {},
-  handler: async (ctx) => {
-    const existing = await ctx.db.query("agentConfigs").collect();
+  args: { groupId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    let existing = await ctx.db.query("agentConfigs").collect();
+    if (args.groupId) {
+      existing = existing.filter((row) => row.groupId === args.groupId);
+    }
     return existing.sort(configSort);
   },
 });
@@ -334,11 +344,26 @@ export const listAgentRunsByAgentId = query({
 });
 
 export const listRecentAgentRuns = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    groupId: v.optional(v.string()),
+    campaignId: v.optional(v.string()),
+    runType: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.min(Math.max(args.limit ?? 25, 1), 100);
     const existing = await ctx.db.query("agentRuns").collect();
-    const source = (existing.length ? existing : defaultAgentRuns) as Array<{ startedAt: number }>;
-    return [...source].sort(runSort).slice(0, 25);
+    let source = (existing.length ? existing : defaultAgentRuns) as Array<Record<string, unknown> & { startedAt: number }>;
+    if (args.groupId) {
+      source = source.filter((r) => r.groupId === args.groupId);
+    }
+    if (args.campaignId) {
+      source = source.filter((r) => r.campaignId === args.campaignId);
+    }
+    if (args.runType) {
+      source = source.filter((r) => r.runType === args.runType);
+    }
+    return [...source].sort(runSort).slice(0, limit);
   },
 });
 
@@ -363,22 +388,16 @@ export const createAgentRun = mutation({
     startedAt: v.number(),
     finishedAt: v.optional(v.number()),
     error: v.optional(v.string()),
+    groupId: v.optional(v.string()),
+    runType: v.optional(v.string()),
+    outputTarget: v.optional(v.string()),
+    safetyMode: v.optional(v.string()),
+    appliedToCampaign: v.optional(v.boolean()),
+    appliedAt: v.optional(v.number()),
+    reviewRequired: v.optional(v.boolean()),
+    createdBy: v.optional(v.string()),
   },
-  handler: async (
-    ctx,
-    args: {
-      runId: string;
-      campaignId?: string;
-      agentId: string;
-      status: AgentRuntimeStatus;
-      inputSnapshot?: string;
-      outputSummary?: string;
-      outputJson?: string;
-      startedAt: number;
-      finishedAt?: number;
-      error?: string;
-    },
-  ) => {
+  handler: async (ctx, args) => {
     const existing = await ctx.db.query("agentRuns").withIndex("by_run_id", (q) => q.eq("runId", args.runId)).unique();
     if (existing?._id) {
       await ctx.db.patch(existing._id, args);
@@ -537,6 +556,163 @@ export const seedDefaultAgentDataIfEmpty = mutation({
     }
 
     return { seededConfigs, seededRuntimeStates, seededRuns };
+  },
+});
+
+/** Inserts Copy Intelligence agent configs that are missing (safe to call multiple times). */
+export const seedCopyIntelligenceAgentsIfMissing = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const ts = Date.now();
+    const targets = defaultAgentConfigs.filter((c) => c.groupId === "copy_intelligence");
+    let inserted = 0;
+    for (const config of targets) {
+      const existing = await ctx.db.query("agentConfigs").withIndex("by_agent_id", (q) => q.eq("agentId", config.agentId)).unique();
+      if (existing) continue;
+      await ctx.db.insert(
+        "agentConfigs",
+        sanitizeAgentConfigForConvex({
+          ...config,
+          updatedAt: ts,
+          lastEditedAt: ts,
+        }) as never,
+      );
+      inserted += 1;
+    }
+    return { inserted };
+  },
+});
+
+/**
+ * Deterministic copy pipeline dry run: builds structured output, logs agentRun, updates campaign pointers.
+ * Does not call external models or mutate campaign copy fields.
+ */
+export const runCopyPipelineDryRun = mutation({
+  args: {
+    campaignId: v.string(),
+    outputType: v.optional(v.string()),
+    userInstructions: v.optional(v.string()),
+    createdBy: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const campaign = await ctx.db.query("campaigns").withIndex("by_campaign_id", (q) => q.eq("campaignId", args.campaignId)).unique();
+    if (!campaign) {
+      throw new Error("CAMPAIGN_NOT_FOUND");
+    }
+
+    const assetId = campaign.sourceProductionAssetId?.trim();
+    const asset = assetId
+      ? await ctx.db.query("productionAssets").withIndex("by_production_asset_id", (q) => q.eq("productionAssetId", assetId)).unique()
+      : null;
+
+    const libraryItems = await ctx.db.query("libraryItems").collect();
+
+    const out = buildCopyPipelineDryRunOutput({
+      campaign: stripSystemFields(campaign) as Record<string, unknown>,
+      productionAsset: asset ? (stripSystemFields(asset) as Record<string, unknown>) : null,
+      libraryItems: libraryItems.map((row) => stripSystemFields(row) as Record<string, unknown>),
+      outputType: args.outputType,
+      userInstructions: args.userInstructions,
+    });
+
+    const t = Date.now();
+    const runId = `copy_run_${t}_${Math.random().toString(36).slice(2, 9)}`;
+
+    await ctx.db.insert("agentRuns", {
+      runId,
+      campaignId: args.campaignId,
+      agentId: "copy_pipeline",
+      status: "complete",
+      groupId: "copy_intelligence",
+      runType: "copy_pipeline",
+      safetyMode: "draft_only",
+      appliedToCampaign: false,
+      reviewRequired: true,
+      createdBy: args.createdBy,
+      inputSnapshot: JSON.stringify(out.inputMeta, null, 2),
+      outputSummary: out.summary,
+      outputJson: JSON.stringify(out.body, null, 2),
+      startedAt: t,
+      finishedAt: t,
+    });
+
+    await ctx.db.patch(campaign._id, {
+      lastCopyRunId: runId,
+      lastCopyRunAt: t,
+      copyIntelligenceStatus: "dry_run_complete",
+      updatedAt: t,
+    } as never);
+
+    return { runId, summary: out.summary, outputJson: out.body };
+  },
+});
+
+export const seedTrendIntelligenceAgentsIfMissing = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const ts = Date.now();
+    const targets = defaultAgentConfigs.filter((c) => c.groupId === "trend_intelligence");
+    let inserted = 0;
+    for (const config of targets) {
+      const existing = await ctx.db.query("agentConfigs").withIndex("by_agent_id", (q) => q.eq("agentId", config.agentId)).unique();
+      if (existing) continue;
+      await ctx.db.insert(
+        "agentConfigs",
+        sanitizeAgentConfigForConvex({
+          ...config,
+          updatedAt: ts,
+          lastEditedAt: ts,
+        }) as never,
+      );
+      inserted += 1;
+    }
+    return { inserted };
+  },
+});
+
+export const seedPerformanceIntelligenceAgentsIfMissing = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const ts = Date.now();
+    const targets = defaultAgentConfigs.filter((c) => c.groupId === "performance_intelligence");
+    let inserted = 0;
+    for (const config of targets) {
+      const existing = await ctx.db.query("agentConfigs").withIndex("by_agent_id", (q) => q.eq("agentId", config.agentId)).unique();
+      if (existing) continue;
+      await ctx.db.insert(
+        "agentConfigs",
+        sanitizeAgentConfigForConvex({
+          ...config,
+          updatedAt: ts,
+          lastEditedAt: ts,
+        }) as never,
+      );
+      inserted += 1;
+    }
+    return { inserted };
+  },
+});
+
+export const seedPlatformConnectorIntelligenceAgentsIfMissing = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const ts = Date.now();
+    const targets = defaultAgentConfigs.filter((c) => c.groupId === "platform_connector_intelligence");
+    let inserted = 0;
+    for (const config of targets) {
+      const existing = await ctx.db.query("agentConfigs").withIndex("by_agent_id", (q) => q.eq("agentId", config.agentId)).unique();
+      if (existing) continue;
+      await ctx.db.insert(
+        "agentConfigs",
+        sanitizeAgentConfigForConvex({
+          ...config,
+          updatedAt: ts,
+          lastEditedAt: ts,
+        }) as never,
+      );
+      inserted += 1;
+    }
+    return { inserted };
   },
 });
 

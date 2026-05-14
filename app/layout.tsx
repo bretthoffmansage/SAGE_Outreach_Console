@@ -7,7 +7,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: appBranding.name,
-  description: "Internal marketing command center for campaign planning, approvals, agents, integrations, and learning.",
+  description: appBranding.metadataDescription,
 };
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });

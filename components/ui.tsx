@@ -11,9 +11,10 @@ const toneMap: Record<string, string> = {
   gray: "border-slate-500 bg-slate-800 text-slate-100",
 };
 
-export function Card({ children, className }: { children: ReactNode; className?: string }) {
+export function Card({ children, className, id }: { children: ReactNode; className?: string; id?: string }) {
   return (
     <section
+      id={id}
       className={cn("panel-console rounded-2xl p-5 shadow-[0_20px_50px_rgba(0,0,0,0.25)]", className)}
     >
       {children}
@@ -21,8 +22,8 @@ export function Card({ children, className }: { children: ReactNode; className?:
   );
 }
 
-export function ControlPanel({ children, className }: { children: ReactNode; className?: string }) {
-  return <Card className={cn("overflow-hidden", className)}>{children}</Card>;
+export function ControlPanel({ children, className, id }: { children: ReactNode; className?: string; id?: string }) {
+  return <Card className={cn("overflow-hidden", className)} id={id}>{children}</Card>;
 }
 
 export function Pill({ children, tone = "gray" }: { children: ReactNode; tone?: "green" | "amber" | "red" | "blue" | "purple" | "gray" | string }) {
@@ -100,12 +101,12 @@ export function SectionHeader({
   description?: string;
   actions?: ReactNode;
 }) {
-  void title;
   return (
     <div className="flex flex-col justify-between gap-3 border-b border-slate-800 pb-3 md:flex-row md:items-end">
       <div>
         {eyebrow ? <p className="text-[0.68rem] font-bold uppercase tracking-[0.24em] text-slate-400">{eyebrow}</p> : null}
-        {description ? <p className={cn("max-w-4xl text-sm leading-6 text-slate-300", eyebrow ? "mt-1.5" : "")}>{description}</p> : null}
+        <h1 className={cn("text-xl font-semibold tracking-tight text-slate-50 md:text-2xl", eyebrow ? "mt-2" : "")}>{title}</h1>
+        {description ? <p className={cn("max-w-4xl text-sm leading-6 text-slate-300", "mt-1.5")}>{description}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
     </div>
@@ -230,6 +231,7 @@ export function AgentNode({
   state,
   tone,
   meta,
+  groupLabel,
   isRunning,
   currentTaskLabel,
   clickable,
@@ -239,6 +241,8 @@ export function AgentNode({
   state: string;
   tone: string;
   meta?: string;
+  /** Optional UI grouping label (e.g. Intelligence area); does not replace agent identity. */
+  groupLabel?: string;
   isRunning?: boolean;
   currentTaskLabel?: string;
   clickable?: boolean;
@@ -253,7 +257,8 @@ export function AgentNode({
     >
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-100">{label}</p>
+          {groupLabel ? <p className="text-[0.62rem] font-bold uppercase tracking-[0.18em] text-slate-500">{groupLabel}</p> : null}
+          <p className={cn("text-sm font-semibold text-slate-100", groupLabel ? "mt-1" : "")}>{label}</p>
           {currentTaskLabel && isRunning ? (
             <p className="mt-1 truncate text-xs text-sky-200">{currentTaskLabel}</p>
           ) : null}

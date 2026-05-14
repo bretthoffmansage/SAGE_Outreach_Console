@@ -12,10 +12,17 @@ import type * as agents from "../agents.js";
 import type * as approvals from "../approvals.js";
 import type * as campaigns from "../campaigns.js";
 import type * as globalStatus from "../globalStatus.js";
+import type * as heartbeat from "../heartbeat.js";
 import type * as integrations from "../integrations.js";
 import type * as keapSync from "../keapSync.js";
 import type * as library from "../library.js";
+import type * as librarySync from "../librarySync.js";
 import type * as linking from "../linking.js";
+import type * as obsidianExport from "../obsidianExport.js";
+import type * as performance from "../performance.js";
+import type * as platformInsights from "../platformInsights.js";
+import type * as productionAssets from "../productionAssets.js";
+import type * as productionBridge from "../productionBridge.js";
 import type * as responses from "../responses.js";
 import type * as runtime_agentRuntime from "../runtime/agentRuntime.js";
 import type * as runtime_buildAgentContext from "../runtime/buildAgentContext.js";
@@ -25,6 +32,8 @@ import type * as runtime_keap from "../runtime/keap.js";
 import type * as runtime_modelProviders from "../runtime/modelProviders.js";
 import type * as runtimePrep from "../runtimePrep.js";
 import type * as todayTasks from "../todayTasks.js";
+import type * as trendResearchRuns from "../trendResearchRuns.js";
+import type * as trendSignals from "../trendSignals.js";
 import type * as users from "../users.js";
 
 import type {
@@ -38,10 +47,17 @@ declare const fullApi: ApiFromModules<{
   approvals: typeof approvals;
   campaigns: typeof campaigns;
   globalStatus: typeof globalStatus;
+  heartbeat: typeof heartbeat;
   integrations: typeof integrations;
   keapSync: typeof keapSync;
   library: typeof library;
+  librarySync: typeof librarySync;
   linking: typeof linking;
+  obsidianExport: typeof obsidianExport;
+  performance: typeof performance;
+  platformInsights: typeof platformInsights;
+  productionAssets: typeof productionAssets;
+  productionBridge: typeof productionBridge;
   responses: typeof responses;
   "runtime/agentRuntime": typeof runtime_agentRuntime;
   "runtime/buildAgentContext": typeof runtime_buildAgentContext;
@@ -51,6 +67,8 @@ declare const fullApi: ApiFromModules<{
   "runtime/modelProviders": typeof runtime_modelProviders;
   runtimePrep: typeof runtimePrep;
   todayTasks: typeof todayTasks;
+  trendResearchRuns: typeof trendResearchRuns;
+  trendSignals: typeof trendSignals;
   users: typeof users;
 }>;
 

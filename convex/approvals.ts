@@ -95,12 +95,7 @@ function payloadForSeed(item: (typeof approvals)[number], index: number) {
     owner: item.owner,
     queue: item.owner,
     linkedCampaignId: item.campaignId,
-    linkedCampaignName:
-      item.campaignId === "camp_reactivation_may"
-        ? "Cold Lead Reactivation — May Week 2"
-        : item.campaignId === "camp_webinar_june"
-          ? "SAGE Webinar Invitation — June"
-          : "Founder Nurture Sequence Refresh",
+    linkedCampaignName: item.campaignName,
     title: item.title,
     description: item.reason,
     context: item.owner === "bari"
@@ -120,12 +115,9 @@ function payloadForSeed(item: (typeof approvals)[number], index: number) {
   if (item.owner === "bari") {
     return sanitizeApprovalItem({
       ...shared,
-      subjectLine: item.id === "approval_bari_voice_002" ? "One more grounded nudge before you decide." : "You can do this, and SAGE can help you start cleanly.",
-      previewText: item.id === "approval_bari_voice_002" ? "Founder follow-up with a softer close and approved sign-off." : "A grounded note from Bari with one low-pressure next step.",
-      bodyText:
-        item.id === "approval_bari_voice_002"
-          ? "P.S. copy draft with a lighter encouragement pattern and room for Bari's final sign-off choice."
-          : "Short paragraph rhythm, direct encouragement, and clear CTA scaffolding appear here as editable seeded content.",
+      subjectLine: "You can do this, and SAGE can help you start cleanly.",
+      previewText: "A grounded note from Bari with one low-pressure next step.",
+      bodyText: "Short paragraph rhythm, direct encouragement, and clear CTA scaffolding appear here as editable seeded content.",
       selectedSignoff: "You can do this — Bari",
       notes: "",
     });

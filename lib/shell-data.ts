@@ -1,4 +1,5 @@
 import { approvals, campaigns, integrations, learningInsights, libraryItems, responses } from "@/lib/data/demo-data";
+import { libraryItemHref, librarySearchCategory } from "@/lib/library-routes";
 
 export type SearchRecord = {
   id: string;
@@ -22,19 +23,19 @@ export const headerNotifications = [
   {
     id: "notif_bari_review",
     title: "Bari copy review needed",
-    description: "Founder voice approval is waiting on the reactivation email draft.",
+    description: "Founder-voice pass is queued for the weekly launch email draft (escalation, not every send).",
     href: "/reviews/bari",
   },
   {
     id: "notif_blue_review",
     title: "Blue approval needed",
-    description: "Webinar positioning and urgency language still need strategic review.",
+    description: "One strategic claim on the September registration warmup packet still needs Blue review.",
     href: "/reviews/blue",
   },
   {
     id: "notif_compliance",
     title: "Compliance guard flagged claim",
-    description: "Guaranteed transformation language should be revised before launch.",
+    description: "Strong outcome language should be tightened before the weekly launch packet goes out.",
     href: "/libraries/compliance",
   },
   {
@@ -51,34 +52,6 @@ export const headerNotifications = [
   },
 ] as const;
 
-function categoryForLibraryType(type: string) {
-  const labels: Record<string, string> = {
-    offer: "Offer",
-    lead_magnet: "Lead Magnet",
-    email: "Email Library",
-    voice_rule: "Bari Voice Rule",
-    signoff: "Sign-off",
-    audience: "Audience",
-    compliance_rule: "Compliance Rule",
-    learning: "Learning Item",
-  };
-  return labels[type] ?? "Library Item";
-}
-
-function hrefForLibraryType(type: string) {
-  const hrefs: Record<string, string> = {
-    offer: "/libraries/offers",
-    lead_magnet: "/libraries/offers",
-    email: "/libraries/email",
-    voice_rule: "/libraries/voice-rules",
-    signoff: "/libraries/signoffs",
-    audience: "/libraries/audiences",
-    compliance_rule: "/libraries/compliance",
-    learning: "/libraries/learning",
-  };
-  return hrefs[type] ?? "/libraries/offers";
-}
-
 function hrefForApprovalOwner(owner: string) {
   const hrefs: Record<string, string> = {
     bari: "/reviews/bari",
@@ -87,8 +60,6 @@ function hrefForApprovalOwner(owner: string) {
   };
   return hrefs[owner] ?? "/reviews/all";
 }
-
-const searchableLibraryTypes = new Set(["offer", "lead_magnet", "email", "voice_rule", "signoff", "audience", "compliance_rule"]);
 
 export const searchRecords: SearchRecord[] = [
   ...campaigns.map((campaign) => ({
@@ -107,16 +78,14 @@ export const searchRecords: SearchRecord[] = [
     href: hrefForApprovalOwner(approval.owner),
     keywords: [approval.owner, approval.riskLevel, approval.recommendedDecision],
   })),
-  ...libraryItems
-    .filter((item) => searchableLibraryTypes.has(item.type))
-    .map((item) => ({
-      id: item.id,
-      title: item.name,
-      category: categoryForLibraryType(item.type),
-      description: `${item.status.replace(/_/g, " ")} · ${item.summary}`,
-      href: hrefForLibraryType(item.type),
-      keywords: [...item.tags, item.type],
-    })),
+  ...libraryItems.map((item) => ({
+    id: item.id,
+    title: item.title || item.name,
+    category: librarySearchCategory(item),
+    description: `${item.status.replace(/_/g, " ")} · ${item.summary}`,
+    href: libraryItemHref(item),
+    keywords: [...item.tags, item.type, item.bucket ?? ""].filter(Boolean),
+  })),
   ...responses.map((response) => ({
     id: response.id,
     title: response.title,
@@ -128,9 +97,9 @@ export const searchRecords: SearchRecord[] = [
   ...learningInsights.map((insight) => ({
     id: insight.id,
     title: insight.title,
-    category: "Learning Item",
+    category: "Campaign Learnings",
     description: `${insight.status} · ${insight.summary}`,
-    href: "/libraries/learning",
+    href: "/libraries/campaign-learnings",
     keywords: [insight.source],
   })),
 ];
