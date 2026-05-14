@@ -110,7 +110,7 @@ const agentSeeds: AgentConfigSeed[] = [
     maxRetries: 1,
     configVersion: 1,
     lastEditedBy: "system_seed",
-    notes: "Campaign Heartbeat — strategy angle without auto-approvals.",
+    notes: "Campaign Heartbeat — strategy angle without auto-approvals. Hermes by Nous (planned office Mac mini runtime) may later coordinate approved heartbeat checks when Operations connects HERMES_RUNTIME_URL.",
   },
   {
     agentId: "audience_agent",

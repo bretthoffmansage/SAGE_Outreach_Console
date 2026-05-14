@@ -38,6 +38,7 @@ Internal naming uses **broad** terms (Weekly Launch Packet, Campaign Heartbeat, 
 
 - **Frontend:** Next.js App Router (`app/[[...slug]]/page.tsx`), `AppShell`, route sections under `components/*-sections.tsx`.
 - **Backend:** Convex (`convex/schema.ts`, queries/mutations per domain).
+- **Planned autonomous runtime:** **Hermes by Nous** on a **local office Mac mini** — integration id `hermes_runtime`, env `HERMES_RUNTIME_URL` (URL shape validation only in this build; no live health ping). Default posture: planned / dry-run / read-only / approval-gated for external writes; distinct from LangGraph Copy Intelligence orchestration.
 - **Auth:** Clerk for sign-in; client-side role gating in UI (`useAppUser`, `canApproveReviewItem`, etc.).
 
 **Important:** Convex mutations are not uniformly wrapped in server-side `ctx.auth` / role checks in this codebase. Treat as **high-priority hardening** before any live integration or write path (see §12).

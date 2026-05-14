@@ -147,7 +147,7 @@ export const OPERATIONS_CATEGORY_SECTIONS: OperationsCategorySection[] = [
     id: "ai_runtime",
     title: "AI and Runtime",
     description:
-      "Model providers, agent orchestration, auth, backend persistence, and deployment health — configurable; live execution only when keys and policies allow.",
+      "Model providers, Copy Intelligence / LangGraph orchestration, the planned Hermes by Nous local Mac mini autonomous runtime, auth, backend persistence, and deployment health — configurable; live execution only when keys, HERMES_RUNTIME_URL, and policies allow. Default posture remains dry-run, read-only, and approval-gated for external actions.",
     placeholders: [],
   },
 ];
@@ -170,6 +170,7 @@ export function operationsCategoryForIntegrationId(integrationId: string): Opera
     integrationId === "openai" ||
     integrationId === "claude" ||
     integrationId === "langgraph" ||
+    integrationId === "hermes_runtime" ||
     integrationId === "convex" ||
     integrationId === "clerk" ||
     integrationId === "vercel"

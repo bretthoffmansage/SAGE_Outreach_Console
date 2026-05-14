@@ -903,7 +903,9 @@ export function LangGraphSection() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-slate-100">Runtime Status</p>
-                      <p className="mt-1 text-xs text-slate-400">Reactive runtime shape for future live LangGraph execution.</p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        Reactive runtime shape for Copy Intelligence / LangGraph. Hermes by Nous on the office Mac mini is the planned separate autonomous layer for approved coordination — not wired from this panel yet.
+                      </p>
                     </div>
                     <StatusBadge tone={tone(selectedRuntime.status)}>{statusLabel(selectedRuntime.status)}</StatusBadge>
                   </div>
@@ -968,7 +970,7 @@ export function LangGraphSection() {
       <SectionHeader
         eyebrow="Copy Intelligence"
         title="Active Agents & LangGraph"
-        description="Turns source assets, audience context, voice rules, offer strategy, hooks, and human edits into stronger campaign copy — not autonomous; no auto-send or auto-post. Other intelligence areas (heartbeat, production bridge, trends, performance, learning) connect as you wire them."
+        description="Turns source assets, audience context, voice rules, offer strategy, hooks, and human edits into stronger campaign copy — human-controlled here; no auto-send or auto-post. Hermes by Nous (planned office Mac mini runtime) can eventually coordinate approved workflows across heartbeat, production bridge, trends, performance, and learning when Operations connects HERMES_RUNTIME_URL — still draft-first and approval-gated."
       />
       <ControlPanel className="p-3">
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Intelligence groups on this map</p>
@@ -1270,7 +1272,7 @@ export function HeartbeatHistorySection() {
       <SectionHeader
         eyebrow="Campaign Heartbeat"
         title="Heartbeat check history"
-        description="Audit trail from deterministic Weekly Launch Packet checks. No external calls — tasks sync to Today Tasks on Home."
+        description="Audit trail from deterministic Weekly Launch Packet checks. No external calls — tasks sync to Today Tasks on Home. Hermes can later run or coordinate heartbeat checks from the local Mac mini runtime once connected."
       />
       <ControlPanel className="p-4">
         {rows === undefined ? (
@@ -1363,7 +1365,7 @@ export function IntelligenceRouteSection({ slug }: { slug?: string[] }) {
       <SectionHeader
         eyebrow="Intelligence"
         title="Intelligence hub"
-        description="Weekly launch and marketing coordination intelligence: copy agents, heartbeat planning, production bridge references, trend research (future), performance patterns, and learning loops — mostly configurable and dry-run until you wire live systems."
+        description="Weekly launch and marketing coordination intelligence: copy agents, heartbeat planning, production bridge references, trend research (future), performance patterns, and learning loops — mostly configurable and dry-run until you wire live systems. Hermes by Nous on the office Mac mini is the planned autonomous runtime for approved coordination when HERMES_RUNTIME_URL is set in Operations."
       />
       <section className="grid gap-3 lg:grid-cols-3">
         {INTELLIGENCE_HUB_CARDS.map((card) => (

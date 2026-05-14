@@ -16,6 +16,7 @@ This folder was prepared by **ForgeShell clean handoff** packaging. ForgeShell r
 
 - Copy or create env files if your app expects them (for example `.env.local`) based on project conventions.
 - External npm dependencies are listed in `package.json`.
+- **Hermes local runtime (planned):** set `HERMES_RUNTIME_URL` server-side to the HTTP(S) endpoint for Hermes by Nous on the office Mac mini when you are ready to validate connectivity. Optional server-only secrets: `HERMES_RUNTIME_API_KEY` or `HERMES_RUNTIME_TOKEN`. Do not expose secrets in `NEXT_PUBLIC_*` variables. The console validates URL shape only; it does not enable auto-send, auto-post, or external writes by default.
 
 ## Deployment / launch
 

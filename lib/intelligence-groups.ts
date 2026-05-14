@@ -119,7 +119,7 @@ export const INTELLIGENCE_HUB_CARDS: IntelligenceHubCard[] = [
     id: "heartbeat",
     title: INTELLIGENCE_GROUP_LABELS.heartbeat,
     description:
-      "Planned scheduler/checker layer for readiness, daily tasks, missing handoffs, and risk summaries (deterministic in v1 — not a live LLM fleet yet).",
+      "Scheduler/checker for readiness, daily tasks, missing handoffs, and risk summaries (deterministic in this app). Hermes by Nous on the office Mac mini can eventually coordinate approved heartbeat runs when the Hermes runtime is connected — Campaign Heartbeat stays the feature name.",
     href: "/intelligence/heartbeat",
     plannedNote: "History on Intelligence; run checks from Home.",
   },

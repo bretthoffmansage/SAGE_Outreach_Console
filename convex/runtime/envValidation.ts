@@ -65,6 +65,44 @@ export function evaluateIntegrationConnection(integration: IntegrationLike): Int
     integration.status === "demo_fallback" ||
     integration.status === "not_configured";
 
+  if (integration.integrationId === "hermes_runtime") {
+    const rawUrl = process.env.HERMES_RUNTIME_URL?.trim();
+    const hadUrl = Boolean(rawUrl);
+    let safePingAttempted = false;
+    let safePingSucceeded = false;
+    let status: IntegrationStatus;
+    let result: string;
+
+    if (!hadUrl) {
+      status = "not_configured";
+      result =
+        "Hermes local runtime is not configured: set HERMES_RUNTIME_URL to the HTTP(S) endpoint for Hermes by Nous on the office Mac mini. No network request was made.";
+    } else {
+      safePingAttempted = true;
+      safePingSucceeded = validateWebhookUrl(rawUrl);
+      if (!safePingSucceeded) {
+        status = "error";
+        result = "HERMES_RUNTIME_URL is set but is not a valid http(s) URL. No network request was made.";
+      } else {
+        status = "connected";
+        result =
+          "HERMES_RUNTIME_URL is present with valid shape. Live health requests to Hermes are not enabled in this build; no network request was made.";
+      }
+    }
+
+    const hermesConfigured = hadUrl && safePingSucceeded;
+    return {
+      status,
+      statusLabel: statusLabelFor(status),
+      result,
+      configuredEnvVars: hermesConfigured ? ["HERMES_RUNTIME_URL"] : [],
+      missingEnvVars: hermesConfigured ? [] : ["HERMES_RUNTIME_URL"],
+      healthSummary: result,
+      safePingAttempted,
+      safePingSucceeded,
+    };
+  }
+
   let status: IntegrationStatus = integration.status;
   let result = "Manual fallback active.";
   let safePingAttempted = false;

@@ -5,7 +5,7 @@ import { type ReactNode, useDeferredValue, useEffect, useMemo, useState } from "
 import { SignIn, SignInButton, UserButton } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, ChevronRight, Menu, Plus, Search, Shield, X } from "lucide-react";
+import { Bell, ChevronRight, Menu, Search, Shield, X } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { getActiveNavCategory, getActiveNavChild, navGroups } from "@/lib/navigation";
 import { appBranding } from "@/lib/branding";
@@ -392,11 +392,6 @@ function ShellFrame({
                     </PopoverCard>
                   ) : null}
                 </div>
-                {role === "admin" || role === "operator" ? (
-                  <button type="button" onClick={() => router.push("/campaigns/new")} className="rounded-lg">
-                    <Button><Plus className="mr-2 h-4 w-4" /> Create Campaign</Button>
-                  </button>
-                ) : null}
                 <div className="relative">
                   <button
                     type="button"

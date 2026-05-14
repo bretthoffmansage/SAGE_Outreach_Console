@@ -317,6 +317,19 @@ export const seedMetaIntegrationRecordsIfMissing = mutation({
   },
 });
 
+/** Inserts Hermes local runtime row when missing (DBs seeded before Hermes was added to demo integrations). */
+export const seedHermesRuntimeIntegrationIfMissing = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const item = demoIntegrations.find((i) => i.id === "hermes_runtime");
+    if (!item) return { inserted: 0 as const };
+    const ex = await ctx.db.query("integrationConnections").withIndex("by_integration_id", (q) => q.eq("integrationId", "hermes_runtime")).unique();
+    if (ex) return { inserted: 0 as const };
+    await ctx.db.insert("integrationConnections", seedPayload(item) as never);
+    return { inserted: 1 as const };
+  },
+});
+
 /**
  * Dry-run readiness: reads Convex integration rows and env key presence only.
  * Does not call Meta APIs or expose secret values.

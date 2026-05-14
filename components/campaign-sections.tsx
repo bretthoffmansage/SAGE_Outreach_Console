@@ -457,7 +457,7 @@ export function DashboardSection() {
               <div>
                 <p className="text-sm font-semibold text-slate-100">Campaign Heartbeat</p>
                 <p className="mt-1 text-xs leading-5 text-slate-400">
-                  Daily scheduler/checker for launch readiness, handoffs, and missing items.
+                  Daily scheduler/checker for launch readiness, handoffs, and missing items. Hermes by Nous on the office Mac mini can later run or coordinate approved heartbeat checks once the Hermes Local Runtime is connected in Operations; for now, checks stay in-app and human-triggered.
                 </p>
               </div>
             </div>

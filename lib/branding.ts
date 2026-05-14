@@ -6,7 +6,7 @@ export const appBranding = {
     "Internal marketing coordination hub for planning, drafting, reviewing, tracking, and learning from weekly launch campaigns.",
   /** Longer explanatory line; refers to Sage Outreach Console descriptively, not as the persistent sidebar brand. */
   descriptionLong:
-    "Sage Outreach Console helps coordinate content releases, email handoffs, creative deliverables, social rollout, approvals, production readiness, AI-assisted copywriting, trend awareness, and performance learning from one controlled system.",
+    "Sage Outreach Console helps coordinate content releases, email handoffs, creative deliverables, social rollout, approvals, production readiness, AI-assisted copywriting, trend awareness, and performance learning from one controlled system. Hermes by Nous on a local office Mac mini is the planned autonomous runtime for approved coordination when HERMES_RUNTIME_URL is configured; default posture remains human approval first, dry-run, and read-only for external actions.",
   /** Root layout `<meta name="description">` — concise for SEO/snippets. */
   metadataDescription:
     "Internal marketing coordination hub for weekly launch campaigns, approvals, content handoffs, copy intelligence, and performance learning.",

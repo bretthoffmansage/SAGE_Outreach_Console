@@ -17,6 +17,8 @@ type KeapSyncJobRecord = Doc<"keapSyncJobs">;
 
 const META_INTEGRATION_IDS = new Set(["meta_platform", "meta_ads", "instagram", "facebook", "meta_connector_mcp"]);
 
+const INTEGRATIONS_WITH_CONNECTOR_POSTURE = new Set<string>([...META_INTEGRATION_IDS, "hermes_runtime"]);
+
 function tone(status: string) {
   if (status === "connected") return "green";
   if (status === "manual_mode" || status === "demo_fallback") return "blue";
@@ -43,6 +45,7 @@ function formatTimestamp(value?: number) {
 function useSeedIntegrations(records: IntegrationRecord[] | undefined) {
   const seedDefaults = useMutation(api.integrations.seedDefaultIntegrationRecordsIfEmpty);
   const seedMeta = useMutation(api.integrations.seedMetaIntegrationRecordsIfMissing);
+  const seedHermes = useMutation(api.integrations.seedHermesRuntimeIntegrationIfMissing);
   const [seedAttempted, setSeedAttempted] = useState(false);
   const metaSeededRef = useRef(false);
   const [seedError, setSeedError] = useState<string | null>(null);
@@ -63,7 +66,8 @@ function useSeedIntegrations(records: IntegrationRecord[] | undefined) {
     if (records === undefined || metaSeededRef.current) return;
     metaSeededRef.current = true;
     void seedMeta({}).catch(() => {});
-  }, [records, seedMeta]);
+    void seedHermes({}).catch(() => {});
+  }, [records, seedMeta, seedHermes]);
 
   return seedError;
 }
@@ -165,6 +169,7 @@ function IntegrationDetail({
   const [metaReadinessText, setMetaReadinessText] = useState<string | null>(null);
   const [metaReadinessBusy, setMetaReadinessBusy] = useState(false);
   const isMetaIntegration = META_INTEGRATION_IDS.has(integration.integrationId);
+  const showConnectorPosture = INTEGRATIONS_WITH_CONNECTOR_POSTURE.has(integration.integrationId);
 
   async function handleCheckConnection() {
     setIsChecking(true);
@@ -257,7 +262,7 @@ function IntegrationDetail({
         </ControlPanel>
       ) : null}
 
-      {isMetaIntegration && (integration.plannedCapabilities?.length || integration.disabledCapabilities?.length) ? (
+      {showConnectorPosture && (integration.plannedCapabilities?.length || integration.disabledCapabilities?.length) ? (
         <ControlPanel className="p-4">
           <p className="text-sm font-semibold text-slate-100">Connector posture</p>
           <div className="mt-3 grid gap-3 md:grid-cols-2 text-sm">
