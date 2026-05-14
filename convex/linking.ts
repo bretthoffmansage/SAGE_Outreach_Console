@@ -157,10 +157,10 @@ function nextActionForCampaign(campaign: CampaignRecord, pendingApprovals: Array
   if (campaign.status === "blocked") return campaign.nextAction;
   if (pendingApprovals.includes("bari")) return "Bari founder-voice approval is still required.";
   if (pendingApprovals.includes("blue")) return "Blue strategic approval is still required.";
-  if (pendingApprovals.includes("internal")) return "Internal send readiness approval is still required.";
+  if (pendingApprovals.includes("internal")) return "Internal launch readiness approval is still required.";
   return campaign.keapPrepStatus === "Mapped"
-    ? "Prepare manual Keap export and internal handoff."
-    : "Finalize handoff mapping and prepare manual export.";
+    ? "Complete handoff prep and prepare manual export when ready."
+    : "Finalize audience/source mapping and complete handoff prep before launch.";
 }
 
 export async function resolveCampaignLibraryLinks(
@@ -345,7 +345,7 @@ export async function syncCampaignAfterApprovalDecision(
     patch.nextAction = `${approval.owner === "bari" ? "Bari" : approval.owner === "blue" ? "Blue" : "Internal"} requested changes. Update the campaign and resubmit.`;
   } else if (approval.owner === "internal" && pendingApprovals.length === 0) {
     patch.status = "ready_for_keap";
-    patch.stage = "Keap Prep";
+    patch.stage = "Handoff Prep";
     patch.nextAction = nextActionForCampaign(nextCampaign, pendingApprovals);
   } else if (pendingApprovals.includes("blue")) {
     patch.status = "needs_blue_review";
@@ -357,7 +357,7 @@ export async function syncCampaignAfterApprovalDecision(
     patch.nextAction = nextActionForCampaign(nextCampaign, pendingApprovals);
   } else if (pendingApprovals.length === 0) {
     patch.status = "ready_for_keap";
-    patch.stage = "Keap Prep";
+    patch.stage = "Handoff Prep";
     patch.nextAction = nextActionForCampaign(nextCampaign, pendingApprovals);
   }
 

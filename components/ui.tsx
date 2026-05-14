@@ -268,11 +268,11 @@ export function AgentNode({
           <StatusDot tone={tone} />
         </div>
       </div>
-      <p className="mt-2 text-xs uppercase tracking-[0.16em] text-slate-400">{state}</p>
+      <p className="mt-2 text-xs font-medium tracking-wide text-slate-400">{state}</p>
       {meta ? <p className="mt-2 text-xs leading-5 text-slate-300">{meta}</p> : null}
       {clickable ? (
-        <div className="mt-3 flex items-center justify-end text-xs font-semibold uppercase tracking-[0.16em] text-sky-200">
-          {actionLabel ?? "Configure"}
+        <div className="mt-3 flex items-center justify-end text-xs font-semibold tracking-wide text-sky-200">
+          {actionLabel ?? "View config"}
           <ChevronRight className="ml-1 h-3.5 w-3.5" />
         </div>
       ) : null}

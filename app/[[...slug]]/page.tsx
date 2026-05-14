@@ -64,7 +64,7 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
   if (slug[0] === "operations") {
     return (
       <AppShell title={title}>
-        <div className="mx-auto max-w-[96rem]">
+        <div className="mx-auto max-w-7xl">
           <OperationsRouteSection slug={slug} />
         </div>
       </AppShell>
@@ -73,7 +73,7 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
 
   return (
     <AppShell title={title}>
-      <div className="mx-auto max-w-[96rem]">
+      <div className="mx-auto max-w-7xl">
         <SettingsSection />
       </div>
     </AppShell>

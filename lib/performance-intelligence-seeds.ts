@@ -93,7 +93,7 @@ export const defaultPerformanceSnapshotSeeds: PerformanceSnapshotSeed[] = [
   {
     snapshotId: "perf_2026_05_20_youtube_weekly_launch_virtual_event_cost_shift",
     campaignId: "camp_reactivation_may",
-    campaignName: "Weekly Launch — Virtual Event Cost Shift",
+    campaignName: "Weekly Launch — Virtual Events Still Matter",
     productionAssetId: "prod_asset_2026_05_virtual_events_still_a_thing",
     platform: "youtube",
     contentType: "full_video",
@@ -115,7 +115,7 @@ export const defaultPerformanceSnapshotSeeds: PerformanceSnapshotSeed[] = [
   {
     snapshotId: "perf_2026_05_20_email_weekly_launch_virtual_event_cost_shift",
     campaignId: "camp_reactivation_may",
-    campaignName: "Weekly Launch — Virtual Event Cost Shift",
+    campaignName: "Weekly Launch — Virtual Events Still Matter",
     platform: "email",
     contentType: "email",
     contentTitle: "Virtual events are still a thing",
@@ -135,7 +135,7 @@ export const defaultPerformanceSnapshotSeeds: PerformanceSnapshotSeed[] = [
   {
     snapshotId: "perf_2026_05_21_instagram_reel_weekly_launch_virtual_event_cost_shift",
     campaignId: "camp_reactivation_may",
-    campaignName: "Weekly Launch — Virtual Event Cost Shift",
+    campaignName: "Weekly Launch — Virtual Events Still Matter",
     trendId: "trend_2026_05_instagram_myth_busting_reel_hook",
     platform: "instagram",
     contentType: "reel",
@@ -203,7 +203,7 @@ export const defaultPerformanceSnapshotSeeds: PerformanceSnapshotSeed[] = [
 export const demoPerformanceReviewSeed = {
   reviewId: "perf_review_demo_weekly_launch_virtual_event_cost_shift",
   campaignId: "camp_reactivation_may",
-  campaignName: "Weekly Launch — Virtual Event Cost Shift",
+  campaignName: "Weekly Launch — Virtual Events Still Matter",
   reviewType: "weekly_launch_review",
   status: "needs_review",
   dateRangeStart: "2026-05-10",

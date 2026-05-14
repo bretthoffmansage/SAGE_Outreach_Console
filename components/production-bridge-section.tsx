@@ -5,7 +5,6 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { Button, ConsoleTable, ControlPanel, SectionHeader, StatusBadge, Td, Th, TableHead } from "@/components/ui";
-import Link from "next/link";
 
 type ProductionAssetRecord = Doc<"productionAssets">;
 type SyncJobRecord = Doc<"productionBridgeSyncJobs">;
@@ -13,6 +12,55 @@ type SyncJobRecord = Doc<"productionBridgeSyncJobs">;
 function formatTs(value?: number) {
   if (!value) return "—";
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(value);
+}
+
+function titleCaseSnake(s: string): string {
+  if (!s) return "—";
+  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function humanizeAssetType(t: string): string {
+  const k = t.toLowerCase();
+  const map: Record<string, string> = {
+    full_video: "Full video",
+    reel: "Reel",
+    short: "Short",
+    thumbnail: "Thumbnail",
+    other: "Other",
+  };
+  return map[k] ?? titleCaseSnake(t);
+}
+
+function humanizeAssetReadinessOrStatus(s: string): string {
+  const k = s.toLowerCase();
+  const map: Record<string, string> = {
+    ready_for_campaign: "Ready for campaign",
+    needs_review: "Needs review",
+    not_ready: "Not ready",
+    ready_for_publish: "Ready for publish",
+    ready: "Ready",
+    draft: "Draft",
+    demo: "Demo",
+    unknown: "Unknown",
+    error: "Error",
+  };
+  return map[k] ?? titleCaseSnake(s);
+}
+
+function humanizeSyncJobField(s: string): string {
+  const k = s.toLowerCase();
+  const map: Record<string, string> = {
+    demo: "Demo",
+    manual: "Manual",
+    manual_import: "Manual import",
+    import: "Import",
+    refresh: "Refresh",
+    dry_run: "Dry-run",
+    completed: "Completed",
+    pending: "Pending",
+    failed: "Failed",
+  };
+  return map[k] ?? titleCaseSnake(s);
 }
 
 function IntegrationStyleCard({
@@ -146,11 +194,11 @@ export function ProductionBridgeSection() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="mx-auto max-w-7xl space-y-5">
       <SectionHeader
         eyebrow="Operations"
         title="Production Bridge"
-        description="Reference source assets from Sage Production Hub, Frame.io, and future Mux storage without merging production and outreach systems."
+        description="Reference source assets from Sage Production Hub, Frame.io, and future Mux storage without merging production and outreach systems. Production Hub remains the source of truth; Outreach stores marketing-facing references only."
         actions={
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => void seedDemo().then((r) => setSeedMsg(r.message))}>
@@ -242,11 +290,6 @@ export function ProductionBridgeSection() {
         <button type="button" onClick={() => setManualOpen((v) => !v)}>
           <Button>{manualOpen ? "Close manual asset form" : "Add manual asset"}</Button>
         </button>
-        <Link href="/campaigns/new">
-          <Button variant="secondary">
-            Create launch packet
-          </Button>
-        </Link>
       </div>
 
       {manualOpen ? (
@@ -328,9 +371,9 @@ export function ProductionBridgeSection() {
               ((assets ?? []) as ProductionAssetRecord[]).map((a) => (
                 <tr key={a._id}>
                   <Td className="max-w-[200px] truncate">{a.title}</Td>
-                  <Td>{a.assetType}</Td>
-                  <Td>{a.readinessStatus ?? a.status}</Td>
-                  <Td>{a.sourceSystem}</Td>
+                  <Td>{humanizeAssetType(a.assetType)}</Td>
+                  <Td>{humanizeAssetReadinessOrStatus(a.readinessStatus ?? a.status)}</Td>
+                  <Td>{humanizeSyncJobField(a.sourceSystem)}</Td>
                   <Td>{(a.linkedCampaignIds ?? []).length}</Td>
                 </tr>
               ))
@@ -362,9 +405,9 @@ export function ProductionBridgeSection() {
               (syncJobs as SyncJobRecord[]).map((job) => (
                 <tr key={job._id}>
                   <Td className="font-mono text-[0.7rem]">{job.syncJobId}</Td>
-                  <Td>{job.sourceSystem}</Td>
-                  <Td>{job.status}</Td>
-                  <Td>{job.mode}</Td>
+                  <Td>{humanizeSyncJobField(job.sourceSystem)}</Td>
+                  <Td>{humanizeSyncJobField(job.status)}</Td>
+                  <Td>{humanizeSyncJobField(job.mode)}</Td>
                   <Td>{formatTs(job.completedAt)}</Td>
                 </tr>
               ))

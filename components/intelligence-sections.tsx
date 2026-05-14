@@ -4,9 +4,18 @@ import { api } from "@/convex/_generated/api";
 import { useAction, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { type ReactNode, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Braces, ChevronLeft, RotateCcw, Save, ShieldAlert, Sparkles } from "lucide-react";
+import { ChevronLeft, RotateCcw, Save, ShieldAlert, Sparkles } from "lucide-react";
 import { defaultAgentConfigs, getDefaultAgentConfig } from "@/lib/agent-config";
-import { COPY_INTELLIGENCE_PLANNED_LAYER_NAMES, intelligenceGroupLabelForAgentId, INTELLIGENCE_HUB_CARDS } from "@/lib/intelligence-groups";
+import {
+  COPY_INTELLIGENCE_PLANNED_LAYER_NAMES,
+  compareIntelligenceGroupKeys,
+  INTELLIGENCE_GROUP_LABELS,
+  INTELLIGENCE_GROUP_SORT_KEYS,
+  type IntelligenceGroupKey,
+  intelligenceGroupKeyForAgentId,
+  intelligenceGroupLabelForAgentId,
+  INTELLIGENCE_HUB_CARDS,
+} from "@/lib/intelligence-groups";
 import { agentRunSteps, campaigns, learningInsights } from "@/lib/data/demo-data";
 import type { AgentConfigRecord } from "@/lib/domain";
 import { CopyIntelligenceSection } from "@/components/copy-intelligence-section";
@@ -34,10 +43,60 @@ import {
 
 function tone(status: string) {
   if (["completed", "complete", "ready", "demo"].includes(status)) return "green";
-  if (["waiting_for_human", "human_pause", "needs_config", "pending"].includes(status)) return "amber";
+  if (["waiting_for_human", "human_pause", "needs_config", "pending", "idle"].includes(status)) return "amber";
   if (["failed", "blocked", "error"].includes(status)) return "red";
   if (["running"].includes(status)) return "blue";
   return "gray";
+}
+
+function mapAgentCardStatus(raw?: string): string {
+  const s = (raw ?? "pending").toLowerCase();
+  if (s === "pending" || s === "idle" || s === "needs_config") return "Planned";
+  if (s === "ready" || s === "complete" || s === "completed" || s === "demo") return "Ready";
+  if (s === "running") return "Running";
+  if (s === "failed" || s === "blocked" || s === "error") return "Error";
+  if (s === "human_pause" || s === "waiting_for_human") return "Human review";
+  return raw ? raw.replace(/_/g, " ") : "Planned";
+}
+
+function humanizeAgentDisplayName(name: string): string {
+  return name
+    .replace(/\bKeap\s*\/\s*Zapier Prep( Agent)?\b/gi, "Manual Handoff Prep")
+    .replace(/\bZapier Prep\b/gi, "Integration handoff prep");
+}
+
+function formatAgentRunStatusLabel(status: string): string {
+  const s = status.toLowerCase();
+  if (s === "completed") return "Completed";
+  if (s === "waiting_for_human") return "Waiting for human";
+  if (s === "running") return "Running";
+  if (s === "failed" || s === "error") return "Error";
+  if (s === "blocked") return "Blocked";
+  if (s === "pending" || s === "queued") return "Planned / pending";
+  return status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function humanizeAgentRunLabel(name: string): string {
+  if (name.includes("Campaign Heartbeat Agent")) return "Launch readiness agent";
+  if (name.includes("Voice Matching Agent")) return "Voice alignment agent";
+  if (name.includes("Approval Router")) return "Review routing agent";
+  return name;
+}
+
+function formatResponseSourceLabel(source?: string): string {
+  if (!source) return "Unknown";
+  if (source === "Manual import") return "Manual import (HelpDesk-style)";
+  if (source === "Email") return "Email";
+  return source.replace(/_/g, " ");
+}
+
+function formatSentimentDisplay(s: string): string {
+  if (!s) return "—";
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function matchedLaunchPacketName(item: { campaignId?: string; campaignName?: string }, campaignNameById: Map<string, string>): string {
+  return item.campaignName ?? (item.campaignId ? campaignNameById.get(item.campaignId) : undefined) ?? "Unmatched";
 }
 
 const responseQueues = ["Needs Reply", "Hot Leads", "Questions", "Objections", "Complaints", "Unsubscribes", "Testimonials", "Unmatched", "All Synced"];
@@ -264,6 +323,71 @@ function ToggleField({
   );
 }
 
+function IntelligenceHubSection() {
+  return (
+    <div className="mx-auto max-w-7xl space-y-5">
+      <SectionHeader
+        eyebrow="Intelligence"
+        title="Intelligence hub"
+        description="Weekly launch and marketing coordination: Copy Intelligence, Trend signals, Performance patterns, Campaign Heartbeat audit, connectors, and learning loops — mostly configurable, draft-only, and dry-run until you intentionally enable live systems. Hermes by Nous on the office Mac mini is a planned local runtime layer for approved coordination when Operations connects a runtime endpoint — not an uncontrolled autonomous actor."
+      />
+      <section className="grid gap-3 lg:grid-cols-3">
+        {INTELLIGENCE_HUB_CARDS.map((card) => (
+          <Link
+            className={cn("focus-ring block rounded-xl", card.emphasis ? "lg:col-span-2" : "")}
+            href={card.href}
+            key={card.id}
+          >
+            <ControlPanel
+              className={cn(
+                "h-full p-4 transition hover:border-slate-600",
+                card.emphasis ? "border-sky-500/30 bg-slate-950/85" : "",
+              )}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-lg font-semibold text-slate-100">{card.title}</h3>
+                {card.emphasis ? <StatusBadge tone="blue">Core</StatusBadge> : <StatusBadge tone="gray">Area</StatusBadge>}
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-300">{card.description}</p>
+              {card.plannedNote ? <p className="mt-2 text-xs text-slate-500">{card.plannedNote}</p> : null}
+              <p className="mt-3 text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">Open linked surface</p>
+            </ControlPanel>
+          </Link>
+        ))}
+      </section>
+      <ControlPanel className="p-4">
+        <p className="text-sm font-semibold text-slate-100">Intelligence routes</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link href="/intelligence/copy">
+            <Button variant="secondary">Copy Intelligence</Button>
+          </Link>
+          <Link href="/intelligence/trends">
+            <Button variant="secondary">Trend Intelligence</Button>
+          </Link>
+          <Link href="/intelligence/performance">
+            <Button variant="secondary">Performance Intelligence</Button>
+          </Link>
+          <Link href="/intelligence/heartbeat">
+            <Button variant="secondary">Campaign Heartbeat</Button>
+          </Link>
+          <Link href="/intelligence/platform-connector">
+            <Button variant="secondary">Platform Connector</Button>
+          </Link>
+          <Link href="/intelligence/responses">
+            <Button variant="secondary">Response Intelligence</Button>
+          </Link>
+          <Link href="/intelligence/agent-runs">
+            <Button variant="secondary">Agent Runs</Button>
+          </Link>
+          <Link href="/intelligence/langgraph">
+            <Button variant="secondary">Runtime Map</Button>
+          </Link>
+        </div>
+      </ControlPanel>
+    </div>
+  );
+}
+
 export function AgentRunsSection() {
   const runRows = agentRunSteps.map((step, index) => {
     const campaign = campaigns[index % campaigns.length];
@@ -272,12 +396,19 @@ export function AgentRunsSection() {
       id: step.id,
       runLabel: `run-${index + 1}`,
       campaignName: campaign?.name ?? "Campaign context",
-      currentAgent: step.agentName,
+      campaignId: campaign?.id,
+      currentAgent: humanizeAgentRunLabel(step.agentName),
+      rawAgentName: step.agentName,
       status: step.status,
       startedFinished: isCompleted ? "14:05 / 14:06" : "14:05 / --",
       blockers: step.status === "waiting_for_human" ? "Waiting for Bari approval" : "No critical blocker",
       outputSummary: step.summary,
       structuredOutputs: step.structuredOutputs,
+      safetyMode: "dry_run",
+      recommendedNext:
+        step.status === "waiting_for_human"
+          ? "Pause for human review before the chain continues."
+          : "Continue the dry-run chain when the operator is ready — no external write.",
     };
   });
   const [selectedRunId, setSelectedRunId] = useState<string>(runRows[0]?.id ?? "");
@@ -291,58 +422,129 @@ export function AgentRunsSection() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="mx-auto max-w-7xl space-y-5">
       <SectionHeader
-        eyebrow="Launch intelligence"
+        eyebrow="Intelligence"
         title="Agent Runs"
-        description="Review dry-run and configured agent activity across copy workflows, campaign heartbeat signals, production bridge prep, response analysis, performance views, and learning loops — traces are illustrative until live execution is connected."
+        description="Review dry-run and configured agent activity across copy workflows, heartbeat checks, response triage, performance reviews, and learning loops. Runs remain audit records until live execution is intentionally connected."
       />
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <ControlPanel className="p-3"><p className="text-xs uppercase tracking-[0.16em] text-slate-400">Total runs</p><p className="mt-1 text-xl font-semibold text-slate-100">{summaryStats.total}</p></ControlPanel>
-        <ControlPanel className="p-3"><p className="text-xs uppercase tracking-[0.16em] text-slate-400">Completed</p><p className="mt-1 text-xl font-semibold text-emerald-200">{summaryStats.completed}</p></ControlPanel>
-        <ControlPanel className="p-3"><p className="text-xs uppercase tracking-[0.16em] text-slate-400">Waiting for human</p><p className="mt-1 text-xl font-semibold text-amber-200">{summaryStats.waitingForHuman}</p></ControlPanel>
-        <ControlPanel className="p-3"><p className="text-xs uppercase tracking-[0.16em] text-slate-400">Errors / blockers</p><p className="mt-1 text-xl font-semibold text-rose-200">{summaryStats.errors}</p></ControlPanel>
-        <ControlPanel className="p-3"><p className="text-xs uppercase tracking-[0.16em] text-slate-400">Running</p><p className="mt-1 text-xl font-semibold text-sky-200">{summaryStats.running}</p></ControlPanel>
+      <div className="flex flex-wrap gap-2">
+        <StatusBadge tone="gray">Dry-run / audit</StatusBadge>
+        <StatusBadge tone="amber">Human approval required</StatusBadge>
+        <StatusBadge tone="gray">No external writes</StatusBadge>
+        <StatusBadge tone="blue">Hermes-ready future</StatusBadge>
+      </div>
+      <p className="text-xs text-slate-500">
+        Hermes by Nous can later coordinate approved workflows from the office Mac mini once connected — this view stays read-only audit posture until then.
+      </p>
+      <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        <ControlPanel className="p-3">
+          <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">Total runs</p>
+          <p className="mt-1 text-xl font-semibold text-slate-100">{summaryStats.total}</p>
+        </ControlPanel>
+        <ControlPanel className="p-3">
+          <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">Completed</p>
+          <p className="mt-1 text-xl font-semibold text-emerald-200">{summaryStats.completed}</p>
+        </ControlPanel>
+        <ControlPanel className="p-3">
+          <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">Waiting for human</p>
+          <p className="mt-1 text-xl font-semibold text-amber-200">{summaryStats.waitingForHuman}</p>
+        </ControlPanel>
+        <ControlPanel className="p-3">
+          <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">Errors / blockers</p>
+          <p className="mt-1 text-xl font-semibold text-rose-200">{summaryStats.errors}</p>
+        </ControlPanel>
+        <ControlPanel className="p-3">
+          <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">Running</p>
+          <p className="mt-1 text-xl font-semibold text-sky-200">{summaryStats.running}</p>
+        </ControlPanel>
       </section>
-      <ConsoleTable>
-        <TableHead>
-          <tr>
-            <Th>Run</Th>
-            <Th>Campaign</Th>
-            <Th>Current / last agent</Th>
-            <Th>Status</Th>
-            <Th>Started / finished</Th>
-            <Th>Errors / blockers</Th>
-            <Th>Output summary</Th>
-            <Th>Open</Th>
-          </tr>
-        </TableHead>
-        <tbody>
-          {runRows.map((run) => (
-            <tr className={selectedRun?.id === run.id ? "bg-slate-900/80" : ""} key={run.id} onClick={() => setSelectedRunId(run.id)}>
-              <Td>{run.runLabel}</Td>
-              <Td className="min-w-[14rem]">{run.campaignName}</Td>
-              <Td>{run.currentAgent}</Td>
-              <Td><StatusBadge tone={tone(run.status)}>{run.status.replace(/_/g, " ")}</StatusBadge></Td>
-              <Td>{run.startedFinished}</Td>
-              <Td>{run.blockers}</Td>
-              <Td className="max-w-[22rem] text-slate-300">{run.outputSummary}</Td>
-              <Td><button className="focus-ring rounded" onClick={() => setSelectedRunId(run.id)} type="button"><InlineAction>Details</InlineAction></button></Td>
-            </tr>
-          ))}
-        </tbody>
-      </ConsoleTable>
-      <ControlPanel className="p-4">
-        <div className="flex items-center gap-2">
-          <Braces className="h-4 w-4 text-sky-300" />
-          <p className="text-sm font-semibold text-slate-100">Selected run structured output</p>
+
+      <div className="grid gap-4 lg:grid-cols-5">
+        <div className="space-y-2 lg:col-span-2">
+          <p className="text-sm font-semibold text-slate-100">Runs</p>
+          <div className="max-h-[min(28rem,70vh)] space-y-2 overflow-y-auto pr-1">
+            {runRows.map((run) => (
+              <button
+                className={cn(
+                  "w-full rounded-xl border px-3 py-2.5 text-left text-sm transition",
+                  selectedRun?.id === run.id ? "border-sky-500/40 bg-sky-950/25" : "border-slate-800 bg-slate-950/55 hover:border-slate-600",
+                )}
+                key={run.id}
+                onClick={() => setSelectedRunId(run.id)}
+                type="button"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-slate-100">{run.runLabel}</span>
+                  <StatusBadge tone={tone(run.status)}>{formatAgentRunStatusLabel(run.status)}</StatusBadge>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">{run.campaignName}</p>
+                <p className="mt-0.5 text-xs text-slate-400">{run.currentAgent}</p>
+                <p className="mt-1 line-clamp-2 text-xs text-slate-500">{run.outputSummary}</p>
+              </button>
+            ))}
+          </div>
         </div>
-        {selectedRun ? (
-          <pre className="mt-3 overflow-auto rounded-lg border border-slate-800 bg-slate-950/75 p-3 text-xs leading-6 text-slate-300">{JSON.stringify(selectedRun.structuredOutputs, null, 2)}</pre>
-        ) : (
-          <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/75 p-3 text-xs leading-6 text-slate-300">No run selected.</div>
-        )}
-      </ControlPanel>
+
+        <ControlPanel className="p-4 lg:col-span-3">
+          {selectedRun ? (
+            <div className="space-y-4 text-sm">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Summary</p>
+                <dl className="mt-2 grid gap-2 text-slate-300 sm:grid-cols-2">
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">
+                    <dt className="text-xs text-slate-500">Run ID</dt>
+                    <dd className="font-mono text-xs text-sky-200">{selectedRun.id}</dd>
+                  </div>
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">
+                    <dt className="text-xs text-slate-500">Workflow / campaign</dt>
+                    <dd className="text-slate-100">{selectedRun.campaignName}</dd>
+                  </div>
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">
+                    <dt className="text-xs text-slate-500">Current or last agent</dt>
+                    <dd className="text-slate-100">{selectedRun.currentAgent}</dd>
+                  </div>
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">
+                    <dt className="text-xs text-slate-500">Status</dt>
+                    <dd>
+                      <StatusBadge tone={tone(selectedRun.status)}>{formatAgentRunStatusLabel(selectedRun.status)}</StatusBadge>
+                    </dd>
+                  </div>
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 sm:col-span-2">
+                    <dt className="text-xs text-slate-500">Started / completed</dt>
+                    <dd className="text-slate-200">{selectedRun.startedFinished}</dd>
+                  </div>
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 sm:col-span-2">
+                    <dt className="text-xs text-slate-500">Blocker or human wait</dt>
+                    <dd className="text-slate-200">{selectedRun.blockers}</dd>
+                  </div>
+                </dl>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Output summary</p>
+                <p className="mt-2 leading-relaxed text-slate-300">{selectedRun.outputSummary}</p>
+                <p className="mt-2 text-xs text-slate-500">
+                  <span className="font-semibold text-slate-400">Recommended next step:</span> {selectedRun.recommendedNext}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  <span className="font-semibold text-slate-400">Safety mode:</span>{" "}
+                  {selectedRun.safetyMode === "dry_run" ? "Dry-run" : selectedRun.safetyMode.replace(/_/g, " ")}
+                </p>
+              </div>
+              <details className="rounded-lg border border-slate-800 bg-slate-950/50">
+                <summary className="cursor-pointer list-none px-3 py-2 text-xs font-semibold text-slate-200 marker:content-none hover:bg-slate-900/60 [&::-webkit-details-marker]:hidden">
+                  Structured output <span className="font-normal text-slate-500">(debug)</span>
+                </summary>
+                <pre className="max-h-64 overflow-auto border-t border-slate-800 p-3 text-xs leading-6 text-slate-400">
+                  {JSON.stringify(selectedRun.structuredOutputs, null, 2)}
+                </pre>
+              </details>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">No run selected.</p>
+          )}
+        </ControlPanel>
+      </div>
     </div>
   );
 }
@@ -354,6 +556,8 @@ export function LangGraphSection() {
   const [draftConfigMap, setDraftConfigMap] = useState<Record<string, AgentConfigRecord>>({});
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isWorking, setIsWorking] = useState(false);
+  const [groupFilter, setGroupFilter] = useState<"all" | IntelligenceGroupKey>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "planned" | "ready" | "running" | "error">("all");
   const seedAttemptedRef = useRef(false);
 
   const agentConfigs = useQuery(api.agents.listAgentConfigs, {});
@@ -415,14 +619,40 @@ export function LangGraphSection() {
     () => [...Object.values(effectiveConfigMap)].sort((left, right) => left.workflowOrder - right.workflowOrder),
     [effectiveConfigMap],
   );
-  const intelligenceGroupsOnGraph = useMemo(() => {
-    const labels = new Set<string>();
-    for (const cfg of orderedConfigs) {
-      labels.add(intelligenceGroupLabelForAgentId(cfg.agentId));
-    }
-    return [...labels].sort((a, b) => a.localeCompare(b));
-  }, [orderedConfigs]);
 
+  const cardsSource = useMemo(() => {
+    let list = orderedConfigs;
+    if (groupFilter !== "all") {
+      list = list.filter((c) => intelligenceGroupKeyForAgentId(c.agentId) === groupFilter);
+    }
+    if (statusFilter !== "all") {
+      list = list.filter((c) => {
+        const m = mapAgentCardStatus(runtimeMap[c.agentId]?.status);
+        if (statusFilter === "planned") return m === "Planned";
+        if (statusFilter === "ready") return m === "Ready";
+        if (statusFilter === "running") return m === "Running";
+        if (statusFilter === "error") return m === "Error";
+        return true;
+      });
+    }
+    return list;
+  }, [orderedConfigs, groupFilter, statusFilter, runtimeMap]);
+
+  const groupedCards = useMemo(() => {
+    const buckets = new Map<IntelligenceGroupKey | null, AgentConfigRecord[]>();
+    for (const cfg of cardsSource) {
+      const key = intelligenceGroupKeyForAgentId(cfg.agentId);
+      const arr = buckets.get(key) ?? [];
+      arr.push(cfg);
+      buckets.set(key, arr);
+    }
+    return buckets;
+  }, [cardsSource]);
+
+  const sortedGroupKeys = useMemo(
+    () => [...groupedCards.keys()].sort((a, b) => compareIntelligenceGroupKeys(a, b)),
+    [groupedCards],
+  );
   const selectedConfig = selectedAgentId ? effectiveConfigMap[selectedAgentId] ?? null : null;
   const selectedRuntime: AgentRuntimeRecord | null = selectedAgentId ? runtimeMap[selectedAgentId] ?? null : null;
   const selectedRunsList: AgentRunRecord[] = (selectedRuns ?? []) as AgentRunRecord[];
@@ -521,10 +751,10 @@ export function LangGraphSection() {
 
   if (agentConfigs === undefined || runtimeStates === undefined || (selectedAgentId && selectedRuns === undefined)) {
     return (
-      <div className="space-y-5">
+      <div className="mx-auto max-w-7xl space-y-5">
         <SectionHeader
-          eyebrow="Copy Intelligence"
-          title="Active Agents & LangGraph"
+          eyebrow="Intelligence"
+          title="Intelligence Runtime Map"
           description="Multi-agent copy and coordination graph — configurable, dry-run friendly, human approval first. Loading agent configs from Convex."
         />
         <ControlPanel className="p-4">
@@ -536,10 +766,10 @@ export function LangGraphSection() {
 
   if (!orderedConfigs.length) {
     return (
-      <div className="space-y-5">
+      <div className="mx-auto max-w-7xl space-y-5">
         <SectionHeader
-          eyebrow="Copy Intelligence"
-          title="Active Agents & LangGraph"
+          eyebrow="Intelligence"
+          title="Intelligence Runtime Map"
           description="Multi-agent copy and coordination graph — configurable, dry-run friendly, human approval first."
         />
         <ControlPanel className="p-4">
@@ -558,7 +788,7 @@ export function LangGraphSection() {
     const activeAgentId = selectedAgentId;
 
     return (
-      <div className="space-y-5">
+      <div className="mx-auto max-w-7xl space-y-5">
         <div className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
           <div className="space-y-3">
             <button
@@ -570,7 +800,7 @@ export function LangGraphSection() {
               type="button"
             >
               <ChevronLeft className="h-4 w-4" />
-              Back to LangGraph map
+              Back to runtime map
             </button>
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -578,8 +808,8 @@ export function LangGraphSection() {
                 <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-500">Category · {selectedConfig.category}</p>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-3">
-                <h2 className="text-2xl font-semibold tracking-tight text-slate-50 md:text-3xl">{selectedConfig.displayName}</h2>
-                <StatusBadge tone={tone(selectedRuntime.status)}>{statusLabel(selectedRuntime.status)}</StatusBadge>
+                <h2 className="text-2xl font-semibold tracking-tight text-slate-50 md:text-3xl">{humanizeAgentDisplayName(selectedConfig.displayName)}</h2>
+                <StatusBadge tone={tone(selectedRuntime.status)}>{mapAgentCardStatus(selectedRuntime.status)}</StatusBadge>
               </div>
               <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-300">{selectedConfig.shortDescription}</p>
             </div>
@@ -903,8 +1133,8 @@ export function LangGraphSection() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-slate-100">Runtime Status</p>
-                      <p className="mt-1 text-xs text-slate-400">
-                        Reactive runtime shape for Copy Intelligence / LangGraph. Hermes by Nous on the office Mac mini is the planned separate autonomous layer for approved coordination — not wired from this panel yet.
+                      <p className="mt-2 text-xs leading-5 text-slate-400">
+                        Reactive runtime shape for Copy Intelligence layers. Hermes by Nous on the office Mac mini is a planned separate local runtime for approved coordination — not wired from this panel until Operations configures a runtime endpoint.
                       </p>
                     </div>
                     <StatusBadge tone={tone(selectedRuntime.status)}>{statusLabel(selectedRuntime.status)}</StatusBadge>
@@ -966,17 +1196,63 @@ export function LangGraphSection() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="mx-auto max-w-7xl space-y-6">
       <SectionHeader
-        eyebrow="Copy Intelligence"
-        title="Active Agents & LangGraph"
-        description="Turns source assets, audience context, voice rules, offer strategy, hooks, and human edits into stronger campaign copy — human-controlled here; no auto-send or auto-post. Hermes by Nous (planned office Mac mini runtime) can eventually coordinate approved workflows across heartbeat, production bridge, trends, performance, and learning when Operations connects HERMES_RUNTIME_URL — still draft-first and approval-gated."
+        eyebrow="Intelligence"
+        title="Intelligence Runtime Map"
+        description="Map configured and planned intelligence layers across Copy, Trend, Performance, Platform Connector, Learning, Response, and Campaign Heartbeat. Most nodes are dry-run or planned; live execution remains disabled until intentionally enabled."
       />
-      <ControlPanel className="p-3">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Intelligence groups on this map</p>
-        <p className="mt-2 text-sm leading-6 text-slate-300">
-          {intelligenceGroupsOnGraph.length ? intelligenceGroupsOnGraph.join(" · ") : "No agents loaded."}
-        </p>
+      <ControlPanel className="p-4">
+        <p className="text-sm font-semibold text-slate-100">Filter map</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            className={cn(
+              "focus-ring rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition",
+              groupFilter === "all" ? "border-sky-500/50 bg-sky-950/40 text-sky-200" : "border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800",
+            )}
+            onClick={() => setGroupFilter("all")}
+            type="button"
+          >
+            All groups
+          </button>
+          {INTELLIGENCE_GROUP_SORT_KEYS.map((key) => (
+            <button
+              className={cn(
+                "focus-ring rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition",
+                groupFilter === key ? "border-sky-500/50 bg-sky-950/40 text-sky-200" : "border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800",
+              )}
+              key={key}
+              onClick={() => setGroupFilter(key)}
+              type="button"
+            >
+              {INTELLIGENCE_GROUP_LABELS[key]}
+            </button>
+          ))}
+        </div>
+        <p className="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Status</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {(
+            [
+              ["all", "All"],
+              ["planned", "Planned"],
+              ["ready", "Ready"],
+              ["running", "Running"],
+              ["error", "Error"],
+            ] as const
+          ).map(([val, label]) => (
+            <button
+              className={cn(
+                "focus-ring rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition",
+                statusFilter === val ? "border-sky-500/50 bg-sky-950/40 text-sky-200" : "border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800",
+              )}
+              key={val}
+              onClick={() => setStatusFilter(val)}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </ControlPanel>
       <details className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950/60">
         <summary className="cursor-pointer list-none px-3 py-2.5 text-sm font-semibold text-slate-200 marker:content-none hover:bg-slate-900/70 [&::-webkit-details-marker]:hidden">
@@ -990,49 +1266,66 @@ export function LangGraphSection() {
           </ul>
         </div>
       </details>
-      <ControlPanel className="p-4">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {orderedConfigs.map((config, index) => {
-            const runtime = runtimeMap[config.agentId];
-            const nextLabel = config.nextAgentIds.length
-              ? config.nextAgentIds
-                  .map((nextId) => effectiveConfigMap[nextId]?.displayName ?? nextId)
-                  .join(", ")
-              : "Workflow terminal node";
+      <div className="space-y-8">
+        {sortedGroupKeys.map((gk) => {
+          const list = groupedCards.get(gk) ?? [];
+          if (!list.length) return null;
+          return (
+            <section className="space-y-3" key={String(gk)}>
+              <h3 className="text-sm font-semibold tracking-wide text-slate-200">{gk ? INTELLIGENCE_GROUP_LABELS[gk] : "Workflow"}</h3>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {list.map((config) => {
+                  const runtime = runtimeMap[config.agentId];
+                  const nextLabel = config.nextAgentIds.length
+                    ? config.nextAgentIds
+                        .map((nextId) => humanizeAgentDisplayName(effectiveConfigMap[nextId]?.displayName ?? nextId))
+                        .join(", ")
+                    : "Workflow terminal node";
 
-            return (
-              <button
-                aria-label={`Open ${config.displayName} configuration`}
-                className="focus-ring rounded-xl text-left"
-                key={config.agentId}
-                onClick={() => {
-                  setSelectedAgentId(config.agentId);
-                  setActiveDetailTab("overview");
-                  setFeedback(null);
-                }}
-                type="button"
-              >
-                <AgentNode
-                  actionLabel="Configure"
-                  clickable
-                  currentTaskLabel={runtime?.currentTaskLabel}
-                  groupLabel={intelligenceGroupLabelForAgentId(config.agentId)}
-                  isRunning={runtime?.isRunning}
-                  label={config.displayName}
-                  meta={index < orderedConfigs.length - 1 ? `Next: ${nextLabel}` : nextLabel}
-                  state={statusLabel(runtime?.status ?? "pending")}
-                  tone={tone(runtime?.status ?? "pending")}
-                />
-              </button>
-            );
-          })}
-        </div>
-      </ControlPanel>
+                  return (
+                    <button
+                      aria-label={`Open ${config.displayName} configuration`}
+                      className="focus-ring rounded-xl text-left"
+                      key={config.agentId}
+                      onClick={() => {
+                        setSelectedAgentId(config.agentId);
+                        setActiveDetailTab("overview");
+                        setFeedback(null);
+                      }}
+                      type="button"
+                    >
+                      <AgentNode
+                        actionLabel="View config"
+                        clickable
+                        currentTaskLabel={runtime?.currentTaskLabel}
+                        groupLabel={intelligenceGroupLabelForAgentId(config.agentId)}
+                        isRunning={runtime?.isRunning}
+                        label={humanizeAgentDisplayName(config.displayName)}
+                        meta={config.nextAgentIds.length > 0 ? `Next: ${nextLabel}` : nextLabel}
+                        state={mapAgentCardStatus(runtime?.status)}
+                        tone={tone(runtime?.status ?? "pending")}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+      {groupFilter === "all" || groupFilter === "runtime_hermes" ? (
+        <ControlPanel className="p-4">
+          <h3 className="text-sm font-semibold text-slate-100">{INTELLIGENCE_GROUP_LABELS.runtime_hermes}</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-400">
+            Hermes by Nous can later coordinate approved workflows from the office Mac mini once Operations connects the runtime endpoint. Until then, this map is configuration and dry-run visibility — not live autonomous execution.
+          </p>
+        </ControlPanel>
+      ) : null}
       <ControlPanel className="p-4">
         <div className="flex items-start gap-3">
           <ShieldAlert className="mt-0.5 h-4 w-4 text-amber-300" />
           <p className="text-sm leading-6 text-slate-300">
-            Human approval remains authoritative between Approval Router and Keap/Zapier Prep. High-risk claims, founder voice work, or blocked rules pause the flow here — agents suggest and structure; operators decide. Chains are configurable and dry-run until you intentionally enable live execution.
+            Human approval remains authoritative between review routing and any manual handoff or integration prep. High-risk claims, founder voice work, and blocked rules pause the flow. Agents suggest and structure; operators decide. Chains remain configurable and dry-run until live execution is intentionally enabled.
           </p>
         </div>
       </ControlPanel>
@@ -1096,7 +1389,16 @@ export function ResponsesSection() {
       return true;
     });
   }, [activeFilter, responses]);
-  const selectedResponse = filteredResponses.find((item) => item.id === selectedId) ?? filteredResponses[0];
+
+  useEffect(() => {
+    if (!filteredResponses.length) return;
+    setSelectedId((prev) => (prev && filteredResponses.some((r) => r.id === prev) ? prev : filteredResponses[0].id));
+  }, [activeFilter, filteredResponses]);
+
+  const selectedResponse = useMemo(() => {
+    if (!filteredResponses.length) return null;
+    return filteredResponses.find((item) => item.id === selectedId) ?? filteredResponses[0];
+  }, [filteredResponses, selectedId]);
   const actorName = appUser.displayName || appUser.clerkUserId || "console_operator";
 
   useEffect(() => {
@@ -1105,12 +1407,18 @@ export function ResponsesSection() {
   }, [selectedResponse]);
 
   return (
-    <div className="space-y-5">
+    <div className="mx-auto max-w-7xl space-y-5">
       <SectionHeader
         eyebrow="Signal monitor"
         title="Response Intelligence"
-        description="Classify inbound replies against campaigns, triage urgency and sentiment, and keep suggested replies in draft-only mode — manual review first; no auto-send or auto-post."
+        description="Classify inbound replies against launch packets, triage urgency and sentiment, and keep suggested replies in draft-only mode for manual review. Nothing auto-sends."
       />
+      <div className="flex flex-wrap gap-2">
+        <StatusBadge tone="amber">Draft-only replies</StatusBadge>
+        <StatusBadge tone="blue">Manual review</StatusBadge>
+        <StatusBadge tone="gray">No auto-send</StatusBadge>
+        <StatusBadge tone="gray">HelpDesk / manual source</StatusBadge>
+      </div>
       <div className="flex flex-wrap gap-2">
         {responseQueues.map((queue, index) => (
           <button key={queue} onClick={() => setActiveFilter(queue)} type="button">
@@ -1125,129 +1433,169 @@ export function ResponsesSection() {
           {feedback}
         </ControlPanel>
       ) : null}
-      <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <ConsoleTable>
-          <TableHead>
-            <tr>
-              <Th>Classification</Th>
-              <Th>Urgency</Th>
-              <Th>Sentiment</Th>
-              <Th>Matched campaign</Th>
-              <Th>Summary</Th>
-              <Th>Recommended action</Th>
-              <Th>Suggested reply</Th>
-            </tr>
-          </TableHead>
-          <tbody>
+      <section className="grid gap-4 lg:grid-cols-2 lg:items-start">
+        <div className="min-w-0 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Response list</p>
+          <div className="max-h-[min(70vh,36rem)] space-y-2 overflow-y-auto pr-1">
             {responseRecords === undefined ? (
-              <tr>
-                <td className="px-4 py-6 text-sm text-slate-300" colSpan={7}>Loading response records.</td>
-              </tr>
+              <ControlPanel className="p-4 text-sm text-slate-400">Loading response records.</ControlPanel>
             ) : !filteredResponses.length ? (
-              <tr>
-                <td className="px-4 py-6 text-sm text-slate-300" colSpan={7}>No response records found.</td>
-              </tr>
-            ) : filteredResponses.map((item) => (
-              <tr className={selectedResponse?.id === item.id ? "bg-slate-900/80" : ""} key={item.id} onClick={() => setSelectedId(item.id)}>
-                <Td>{item.classification}</Td>
-                <Td><StatusBadge tone={item.urgency === "high" ? "red" : item.urgency === "medium" ? "amber" : "green"}>{item.urgency}</StatusBadge></Td>
-                <Td>{item.sentiment}</Td>
-                <Td className="min-w-[15rem]">{item.campaignName ?? (item.campaignId ? campaignNameById.get(item.campaignId) : undefined) ?? "Unmatched"}{item.matchConfidence !== undefined ? ` · ${Math.round(item.matchConfidence * 100)}%` : ""}</Td>
-                <Td className="min-w-[18rem] max-w-[30rem] whitespace-normal text-slate-300">{item.summary}</Td>
-                <Td>{item.recommendedAction}</Td>
-                <Td>{item.suggestedReplyStatus === "draft_only" ? "Draft only" : item.suggestedReplyStatus ?? "Draft only"}</Td>
-              </tr>
-            ))}
-          </tbody>
-        </ConsoleTable>
-        <div className="grid gap-4">
-          <QueueLane title="Signal Snapshot" count={responses.length} tone="blue" subtitle="Manual response handling only.">
+              <ControlPanel className="p-4 text-sm text-slate-400">No response records in this filter.</ControlPanel>
+            ) : (
+              filteredResponses.map((item) => {
+                const packet = matchedLaunchPacketName(item, campaignNameById);
+                const needsReply = item.classification === "Needs Reply" || item.status === "needs_reply";
+                const hotLead = item.tags.includes("hot_lead") || (item.sentiment === "positive" && item.urgency !== "low");
+                return (
+                  <button
+                    className={cn(
+                      "focus-ring w-full rounded-xl border p-3 text-left transition",
+                      selectedResponse?.id === item.id ? "border-sky-500/50 bg-sky-950/25" : "border-slate-800 bg-slate-950/50 hover:border-slate-700 hover:bg-slate-900/60",
+                    )}
+                    key={item.id}
+                    onClick={() => setSelectedId(item.id)}
+                    type="button"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-slate-100">{item.classification}</span>
+                      <StatusBadge tone={item.urgency === "high" ? "red" : item.urgency === "medium" ? "amber" : "green"}>{item.urgency}</StatusBadge>
+                      <span className="text-xs text-slate-500">{formatSentimentDisplay(item.sentiment)}</span>
+                      {needsReply ? (
+                        <StatusBadge tone="amber">Needs reply</StatusBadge>
+                      ) : null}
+                      {hotLead ? (
+                        <StatusBadge tone="green">Hot lead</StatusBadge>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 truncate text-xs text-sky-200/90" title={packet}>
+                      {packet}
+                      {item.matchConfidence !== undefined ? ` · ${Math.round(item.matchConfidence * 100)}% match` : ""}
+                    </p>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">{item.summary}</p>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+        <div className="min-w-0 space-y-4">
+          <QueueLane count={responses.length} subtitle="Queue counts for triage. Nothing sends from this screen." title="Signal snapshot" tone="blue">
             <SignalList
               items={[
                 { label: "Needs reply", value: filterCount("Needs Reply"), tone: "amber" },
                 { label: "Hot leads", value: filterCount("Hot Leads"), tone: "green" },
                 { label: "Unmatched", value: filterCount("Unmatched"), tone: "gray" },
-                { label: "No auto-send", value: responses.every((item) => item.noAutoSend) ? "active" : "mixed", tone: "red" },
+                { label: "Draft-only posture", value: responses.every((item) => item.noAutoSend) ? "On" : "Mixed", tone: "red" },
               ]}
             />
           </QueueLane>
           <ControlPanel className="p-4">
             {selectedResponse ? (
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div>
-                  <p className="text-sm font-semibold text-slate-100">{selectedResponse.title}</p>
-                  <p className="mt-1 text-sm text-slate-300">{selectedResponse.summary}</p>
+                  <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Summary</h3>
+                  <p className="mt-2 text-sm font-semibold text-slate-100">{selectedResponse.title}</p>
+                  <dl className="mt-3 grid gap-2 text-sm text-slate-300">
+                    <div className="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2">
+                      <dt className="text-slate-500">Classification</dt>
+                      <dd className="text-slate-100">{selectedResponse.classification}</dd>
+                    </div>
+                    <div className="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2">
+                      <dt className="text-slate-500">Urgency / sentiment</dt>
+                      <dd className="text-slate-100">
+                        {selectedResponse.urgency} / {formatSentimentDisplay(selectedResponse.sentiment)}
+                      </dd>
+                    </div>
+                    <div className="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2">
+                      <dt className="text-slate-500">Matched launch packet</dt>
+                      <dd className="max-w-[16rem] text-right text-slate-100">{matchedLaunchPacketName(selectedResponse, campaignNameById)}</dd>
+                    </div>
+                    <div className="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2">
+                      <dt className="text-slate-500">Recommended action</dt>
+                      <dd className="text-right text-slate-100">{selectedResponse.recommendedAction}</dd>
+                    </div>
+                    <div className="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2">
+                      <dt className="text-slate-500">Received</dt>
+                      <dd className="text-slate-100">{formatTimestamp(selectedResponse.receivedAt)}</dd>
+                    </div>
+                    <div className="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2">
+                      <dt className="text-slate-500">Source</dt>
+                      <dd className="text-slate-100">{formatResponseSourceLabel(selectedResponse.source)}</dd>
+                    </div>
+                  </dl>
                 </div>
-                <div className="grid gap-2 text-sm text-slate-300">
-                  <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">Classification: <span className="text-slate-100">{selectedResponse.classification}</span></div>
-                  <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">Urgency / Sentiment: <span className="text-slate-100">{selectedResponse.urgency} / {selectedResponse.sentiment}</span></div>
-                  <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">Matched campaign: <span className="text-slate-100">{selectedResponse.campaignName ?? "Unmatched"}</span></div>
-                  <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">Recommended action: <span className="text-slate-100">{selectedResponse.recommendedAction}</span></div>
-                  <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">Received: <span className="text-slate-100">{formatTimestamp(selectedResponse.receivedAt)}</span></div>
-                  <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">Source: <span className="text-slate-100">{selectedResponse.source ?? "Unknown"}</span></div>
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Original message</h3>
+                  <div className="mt-2 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3 text-sm leading-relaxed text-slate-300">
+                    <p className="whitespace-pre-wrap">{selectedResponse.originalMessage ?? "No original message captured."}</p>
+                  </div>
                 </div>
-                <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3 text-sm text-slate-300">
-                  <p className="font-semibold text-slate-100">Original message</p>
-                  <p className="mt-2 whitespace-pre-wrap">{selectedResponse.originalMessage ?? "No original message captured."}</p>
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Suggested reply</h3>
+                  <p className="mt-1 text-xs text-slate-500">Editable draft only — copy into your mail tool or CRM when ready. Nothing auto-sends from Outreach Console.</p>
+                  <label className="mt-2 grid gap-2">
+                    <textarea className={textareaStyles} onChange={(event) => setReplyDraft(event.target.value)} value={replyDraft} />
+                  </label>
                 </div>
-                <label className="grid gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Suggested reply</span>
-                  <textarea className={textareaStyles} onChange={(event) => setReplyDraft(event.target.value)} value={replyDraft} />
-                </label>
-                <label className="grid gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Notes</span>
-                  <textarea className={textareaStyles} onChange={(event) => setNotesDraft(event.target.value)} value={notesDraft} />
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    className={cn(actionButtonStyles, "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800")}
-                    onClick={() => {
-                      void updateSuggestedReply({ responseId: selectedResponse.id, suggestedReply: replyDraft, suggestedReplyStatus: "draft_only" })
-                        .then(() => setFeedback("Response saved."))
-                        .catch(() => setFeedback("Unable to save response. Check Convex connection."));
-                    }}
-                    type="button"
-                  >
-                    Save suggested reply
-                  </button>
-                  <button
-                    className={cn(actionButtonStyles, "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800")}
-                    onClick={() => {
-                      void updateResponseNotes({ responseId: selectedResponse.id, notes: notesDraft })
-                        .then(() => setFeedback("Response saved."))
-                        .catch(() => setFeedback("Unable to save response. Check Convex connection."));
-                    }}
-                    type="button"
-                  >
-                    Save notes
-                  </button>
-                  <button
-                    className={cn(actionButtonStyles, "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800")}
-                    onClick={() => {
-                      void markResponseNeedsReply({ responseId: selectedResponse.id })
-                        .then(() => setFeedback("Response saved."))
-                        .catch(() => setFeedback("Unable to save response. Check Convex connection."));
-                    }}
-                    type="button"
-                  >
-                    Mark needs reply
-                  </button>
-                  <button
-                    className={cn(actionButtonStyles, "border-sky-500/60 bg-sky-500 text-slate-950 hover:bg-sky-400")}
-                    onClick={() => {
-                      void markResponseResolved({ responseId: selectedResponse.id, resolvedBy: actorName })
-                        .then(() => setFeedback("Response saved."))
-                        .catch(() => setFeedback("Unable to save response. Check Convex connection."));
-                    }}
-                    type="button"
-                  >
-                    Mark resolved
-                  </button>
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Operator notes</h3>
+                  <label className="mt-2 grid gap-2">
+                    <textarea className={cn(textareaStyles, "min-h-[88px]")} onChange={(event) => setNotesDraft(event.target.value)} value={notesDraft} />
+                  </label>
                 </div>
-                <p className="text-xs text-slate-400">Suggested replies remain drafts only. No auto-send in MVP.</p>
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Actions</h3>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      className={cn(actionButtonStyles, "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800")}
+                      onClick={() => {
+                        void updateSuggestedReply({ responseId: selectedResponse.id, suggestedReply: replyDraft, suggestedReplyStatus: "draft_only" })
+                          .then(() => setFeedback("Response saved."))
+                          .catch(() => setFeedback("Unable to save response. Check Convex connection."));
+                      }}
+                      type="button"
+                    >
+                      Save suggested reply
+                    </button>
+                    <button
+                      className={cn(actionButtonStyles, "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800")}
+                      onClick={() => {
+                        void updateResponseNotes({ responseId: selectedResponse.id, notes: notesDraft })
+                          .then(() => setFeedback("Response saved."))
+                          .catch(() => setFeedback("Unable to save response. Check Convex connection."));
+                      }}
+                      type="button"
+                    >
+                      Save notes
+                    </button>
+                    <button
+                      className={cn(actionButtonStyles, "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800")}
+                      onClick={() => {
+                        void markResponseNeedsReply({ responseId: selectedResponse.id })
+                          .then(() => setFeedback("Response saved."))
+                          .catch(() => setFeedback("Unable to save response. Check Convex connection."));
+                      }}
+                      type="button"
+                    >
+                      Mark needs reply
+                    </button>
+                    <button
+                      className={cn(actionButtonStyles, "border-sky-500/60 bg-sky-500 text-slate-950 hover:bg-sky-400")}
+                      onClick={() => {
+                        void markResponseResolved({ responseId: selectedResponse.id, resolvedBy: actorName })
+                          .then(() => setFeedback("Response saved."))
+                          .catch(() => setFeedback("Unable to save response. Check Convex connection."));
+                      }}
+                      type="button"
+                    >
+                      Mark resolved
+                    </button>
+                  </div>
+                </div>
+                <p className="border-t border-slate-800 pt-3 text-xs text-slate-500">Suggested replies remain drafts only. No auto-send.</p>
               </div>
             ) : (
-              <p className="text-sm text-slate-300">Select a response to inspect details.</p>
+              <p className="text-sm text-slate-400">Select a response from the list.</p>
             )}
           </ControlPanel>
         </div>
@@ -1268,17 +1616,58 @@ export function HeartbeatHistorySection() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="mx-auto max-w-7xl space-y-5">
       <SectionHeader
         eyebrow="Campaign Heartbeat"
-        title="Heartbeat check history"
-        description="Audit trail from deterministic Weekly Launch Packet checks. No external calls — tasks sync to Today Tasks on Home. Hermes can later run or coordinate heartbeat checks from the local Mac mini runtime once connected."
+        title="Campaign Heartbeat Audit"
+        description="Audit trail for deterministic Weekly Launch Packet readiness checks. Home remains the daily place to run Campaign Heartbeat; this page shows check history, rule posture, and future Hermes local runtime context."
       />
+      <div className="grid gap-3 lg:grid-cols-2">
+        <ControlPanel className="p-4">
+          <p className="text-sm font-semibold text-slate-100">Current mode</p>
+          <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-400">
+            <li>
+              <span className="font-medium text-slate-200">Mode:</span> In-app / human-triggered
+            </li>
+            <li>
+              <span className="font-medium text-slate-200">External calls:</span> None
+            </li>
+            <li>
+              <span className="font-medium text-slate-200">Task writes:</span> Today Tasks only
+            </li>
+            <li>
+              <span className="font-medium text-slate-200">Auto-send / post:</span> Disabled
+            </li>
+          </ul>
+        </ControlPanel>
+        <ControlPanel className="p-4">
+          <p className="text-sm font-semibold text-slate-100">What Heartbeat checks</p>
+          <ul className="mt-3 list-inside list-disc space-y-1.5 text-sm leading-6 text-slate-400">
+            <li>Source asset</li>
+            <li>YouTube scheduled link</li>
+            <li>Emailmarketing.com handoff</li>
+            <li>Brandon / creative handoff</li>
+            <li>Social rollout</li>
+            <li>Review gates</li>
+            <li>Launch readiness</li>
+            <li>Performance follow-up (when applicable)</li>
+          </ul>
+        </ControlPanel>
+        <ControlPanel className="p-4 lg:col-span-2">
+          <p className="text-sm font-semibold text-slate-100">Future Hermes coordination</p>
+          <p className="mt-2 text-sm leading-6 text-slate-400">
+            Hermes by Nous can later coordinate approved heartbeat workflows from the office Mac mini once Operations has a configured runtime endpoint. Until then, checks are in-app and human-triggered — Hermes is not running checks in this build.
+          </p>
+        </ControlPanel>
+      </div>
       <ControlPanel className="p-4">
+        <p className="text-sm font-semibold text-slate-100">Recent checks</p>
         {rows === undefined ? (
-          <p className="text-sm text-slate-400">Loading…</p>
+          <p className="mt-3 text-sm text-slate-400">Loading…</p>
         ) : !rows.length ? (
-          <p className="text-sm text-slate-400">No heartbeat checks recorded yet. Run Campaign Heartbeat from Home.</p>
+          <p className="mt-3 text-sm text-slate-400">
+            No heartbeat checks recorded yet. Run Campaign Heartbeat from Home to create the first check.
+          </p>
         ) : (
           <ConsoleTable>
             <TableHead>
@@ -1316,8 +1705,8 @@ export function HeartbeatHistorySection() {
         <Link href="/dashboard">
           <Button variant="secondary">Home — run heartbeat</Button>
         </Link>
-        <Link href="/intelligence">
-          <Button variant="ghost">Intelligence hub</Button>
+        <Link href="/intelligence/hub">
+          <Button variant="ghost">Back to Intelligence</Button>
         </Link>
       </div>
     </div>
@@ -1325,9 +1714,10 @@ export function HeartbeatHistorySection() {
 }
 
 export function IntelligenceRouteSection({ slug }: { slug?: string[] }) {
+  if (slug?.[1] === "hub") return <IntelligenceHubSection />;
   if (slug?.[1] === "heartbeat") return <HeartbeatHistorySection />;
   if (slug?.[1] === "langgraph") return <LangGraphSection />;
-  if (slug?.[1] === "copy") {
+  if (!slug?.[1] || slug?.[1] === "copy") {
     return (
       <Suspense fallback={<div className="rounded-xl border border-slate-800 bg-slate-950/60 p-6 text-sm text-slate-400">Loading Copy Intelligence…</div>}>
         <CopyIntelligenceSection />
@@ -1360,58 +1750,5 @@ export function IntelligenceRouteSection({ slug }: { slug?: string[] }) {
     );
   }
 
-  return (
-    <div className="space-y-5">
-      <SectionHeader
-        eyebrow="Intelligence"
-        title="Intelligence hub"
-        description="Weekly launch and marketing coordination intelligence: copy agents, heartbeat planning, production bridge references, trend research (future), performance patterns, and learning loops — mostly configurable and dry-run until you wire live systems. Hermes by Nous on the office Mac mini is the planned autonomous runtime for approved coordination when HERMES_RUNTIME_URL is set in Operations."
-      />
-      <section className="grid gap-3 lg:grid-cols-3">
-        {INTELLIGENCE_HUB_CARDS.map((card) => (
-          <Link
-            className={cn("focus-ring block rounded-xl", card.emphasis ? "lg:col-span-2" : "")}
-            href={card.href}
-            key={card.id}
-          >
-            <ControlPanel
-              className={cn(
-                "h-full p-4 transition hover:border-slate-600",
-                card.emphasis ? "border-sky-500/30 bg-slate-950/85" : "",
-              )}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-lg font-semibold text-slate-100">{card.title}</h3>
-                {card.emphasis ? <StatusBadge tone="blue">Core</StatusBadge> : <StatusBadge tone="gray">Area</StatusBadge>}
-              </div>
-              <p className="mt-2 text-sm leading-6 text-slate-300">{card.description}</p>
-              {card.plannedNote ? <p className="mt-2 text-xs text-slate-500">{card.plannedNote}</p> : null}
-              <p className="mt-3 text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">Open linked surface</p>
-            </ControlPanel>
-          </Link>
-        ))}
-      </section>
-      <ControlPanel className="p-4">
-        <p className="text-sm font-semibold text-slate-100">Intelligence routes</p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Link href="/intelligence/trends">
-            <Button variant="secondary">Trend Intelligence</Button>
-          </Link>
-          <Link href="/intelligence/copy">
-            <Button variant="secondary">Copy Intelligence</Button>
-          </Link>
-          <Link href="/intelligence/heartbeat">
-            <Button variant="secondary">Campaign Heartbeat</Button>
-          </Link>
-          <Link href="/intelligence/langgraph"><Button variant="secondary">LangGraph Map</Button></Link>
-          <Link href="/intelligence/agent-runs"><Button variant="secondary">Agent Runs</Button></Link>
-          <Link href="/intelligence/responses"><Button variant="secondary">Response Intelligence</Button></Link>
-          <Link href="/intelligence/performance"><Button variant="secondary">Performance Intelligence</Button></Link>
-          <Link href="/intelligence/platform-connector">
-            <Button variant="secondary">Platform Connector Intelligence</Button>
-          </Link>
-        </div>
-      </ControlPanel>
-    </div>
-  );
+  return <IntelligenceHubSection />;
 }

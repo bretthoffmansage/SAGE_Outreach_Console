@@ -9,9 +9,46 @@ import { campaigns, libraryItems } from "@/lib/data/demo-data";
 import type { ApprovalItem } from "@/lib/domain";
 import { canApproveReviewItem, roleLabel } from "@/lib/auth";
 import { useAppUser } from "@/components/auth/app-user-context";
-import { Button, ConsoleTable, ControlPanel, InlineAction, Pill, QueueLane, SectionHeader, SignalList, StatusBadge, Td, Th, TableHead } from "@/components/ui";
+import { Button, ControlPanel, Pill, QueueLane, SectionHeader, SignalList, StatusBadge } from "@/components/ui";
+import { cn } from "@/lib/utils";
 
 type ReviewMode = "bari" | "blue" | "internal" | "all";
+
+function riskDisplayLabel(risk: ApprovalItem["riskLevel"]) {
+  if (risk === "green") return "Low";
+  if (risk === "yellow") return "Medium";
+  if (risk === "red") return "High";
+  return "—";
+}
+
+function statusDisplayLabel(status: ApprovalItem["status"]) {
+  const map: Record<string, string> = {
+    pending: "Pending review",
+    approved: "Approved",
+    approved_with_changes: "Approved with edits",
+    changes_requested: "Changes requested",
+    rejected: "Rejected",
+    blocked: "Blocked",
+  };
+  return map[status] ?? status.replace(/_/g, " ");
+}
+
+function reviewLaneLabel(owner: ApprovalItem["owner"]) {
+  if (owner === "bari") return "Founder Voice / Bari";
+  if (owner === "blue") return "Strategy / Blue";
+  return "Internal Readiness";
+}
+
+function reviewLaneShort(owner: string) {
+  if (owner === "bari") return "Bari";
+  if (owner === "blue") return "Blue";
+  if (owner === "internal") return "Internal";
+  return owner;
+}
+
+function recommendedDecisionLabel(raw: string) {
+  return raw.replace(/_/g, " ");
+}
 
 function toApprovalItem(record: {
   approvalId: string;
@@ -110,7 +147,7 @@ function modeConfig(mode: ReviewMode) {
       title: "Blue Review",
       tone: "blue",
       description:
-        "Strategy, positioning, claims, and big campaign direction. Use Blue for major angle decisions, strategic clarity, public claims, offer or event direction, and positioning that changes the promise. Routine launch execution should not wait on Blue unless the item is strategically sensitive — no auto-send or auto-post from these decisions.",
+        "Strategy, positioning, claims, and big campaign direction. Use Blue for major decisions, strategic clarity, public claims, offer direction, or event positioning that changes the promise. Routine launch execution should not wait on Blue unless the item is strategically sensitive — nothing auto-sends, auto-posts, or auto-publishes from these decisions.",
     };
   }
   if (mode === "internal") {
@@ -118,14 +155,14 @@ function modeConfig(mode: ReviewMode) {
       title: "Internal Approvals",
       tone: "green",
       description:
-        "Operational readiness and launch packet checks. Confirm the packet can move forward: YouTube scheduling state, email handoff readiness, creative handoff, social copy, campaign readiness, and manual integration prep — human-controlled; external systems stay manual until intentionally connected.",
+        "Operational readiness and launch packet checks. Confirm the packet can move forward: source asset, YouTube scheduling, Emailmarketing.com handoff, creative handoff, social rollout, review gates, and manual registration or CRM tracking if needed. External systems stay manual until intentionally connected.",
     };
   }
   return {
     title: "All Approvals",
     tone: "purple",
     description:
-      "Unified approval queue for campaign copy, strategy, claims, and launch readiness. Review all open gates across those areas without turning every routine task into a founder or strategy escalation.",
+      "Human approval center for launch packets: copy, strategy, claims, and readiness. Nothing auto-sends, auto-posts, or auto-publishes from this page. Bari and Blue are escalation reviewers; internal review handles routine launch readiness.",
   };
 }
 
@@ -138,12 +175,10 @@ function pendingApprovalsFor(items: ApprovalItem[], mode: ReviewMode) {
 function ReviewQueueList({
   activeApproval,
   items,
-  hrefBase,
   onSelect,
 }: {
   activeApproval?: ApprovalItem;
   items: ApprovalItem[];
-  hrefBase: string;
   onSelect: (approval: ApprovalItem) => void;
 }) {
   return (
@@ -156,12 +191,12 @@ function ReviewQueueList({
           className={`block rounded-lg border px-3 py-3 text-left transition-colors ${activeApproval?.id === approval.id ? "border-sky-500/40 bg-slate-900 shadow-[inset_2px_0_0_0_rgba(56,189,248,0.9)]" : "border-slate-800 bg-slate-950/70 hover:bg-slate-900/70"}`}
         >
           <div className="flex items-center justify-between gap-3">
-            <Pill tone={toneFor(approval.owner, approval.riskLevel)}>{approval.owner}</Pill>
-            <StatusBadge tone={toneFor(approval.owner, approval.riskLevel)}>{approval.riskLevel}</StatusBadge>
+            <Pill tone={toneFor(approval.owner, approval.riskLevel)}>{reviewLaneShort(approval.owner)}</Pill>
+            <StatusBadge tone={toneFor(approval.owner, approval.riskLevel)}>{riskDisplayLabel(approval.riskLevel)}</StatusBadge>
           </div>
           <p className="mt-3 text-sm font-semibold text-slate-100">{approval.title}</p>
           <p className="mt-1 text-xs leading-5 text-slate-400">{campaignNameFor(approval)}</p>
-          <p className="mt-2 text-xs text-sky-300">Open in {hrefBase.replace("/reviews/", "").replace("all", "specialized")} review</p>
+          <p className="mt-2 text-xs font-medium text-sky-300">Open in {reviewLaneLabel(approval.owner)}</p>
         </button>
       ))}
     </div>
@@ -213,18 +248,23 @@ function BariReviewConsole({
   if (!active) {
     return (
       <ControlPanel className="p-6">
-        <p className="text-lg font-semibold text-slate-100">No founder-voice copy waiting on Bari.</p>
+        <p className="text-lg font-semibold text-slate-100">No founder voice reviews queued.</p>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          Keep routine copy moving through internal review unless founder tone, high-stakes language, or brand-sensitive judgment is needed. No open approval gates in this queue right now.
+          Bari review appears only when founder voice, sign-off, or important public copy needs escalation. Routine launch work stays with internal operators.
         </p>
       </ControlPanel>
     );
   }
 
   return (
-    <section className="grid gap-4 xl:grid-cols-[0.8fr_1.3fr_0.9fr]">
-      <QueueLane title="Bari Queue" count={items.length} tone="amber" subtitle="Escalation for founder voice and high-value public-facing copy — not every routine launch step.">
-        <ReviewQueueList activeApproval={active} items={items} hrefBase="/reviews/bari" onSelect={(approval) => setSelectedId(approval.id)} />
+    <section className="grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.35fr)_minmax(0,0.95fr)]">
+      <QueueLane
+        count={items.length}
+        subtitle="Bari reviews founder voice, sign-offs, and high-value public copy only when escalation is needed."
+        title="Founder Voice Queue"
+        tone="amber"
+      >
+        <ReviewQueueList activeApproval={active} items={items} onSelect={(approval) => setSelectedId(approval.id)} />
       </QueueLane>
       <ControlPanel className="p-4">
         <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
@@ -232,7 +272,7 @@ function BariReviewConsole({
             <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Copy Workspace</p>
             <h3 className="mt-1 text-lg font-semibold text-slate-100">{active.title}</h3>
             <p className="mt-1 text-sm text-slate-300">
-              Review this founder-signed or high-stakes copy. Edits stay in the console until humans approve — nothing auto-sends.
+              Review founder-signed or high-stakes copy. Edits stay in the console until humans approve — nothing auto-sends, posts, or publishes.
             </p>
           </div>
           <StatusBadge tone="amber">Voice confidence 74%</StatusBadge>
@@ -256,13 +296,15 @@ function BariReviewConsole({
             <input className={inputStyles} onChange={(event) => setSelectedSignoff(event.target.value)} value={selectedSignoff} />
           </label>
         </div>
-        <label className="mt-4 flex items-center gap-2 text-sm text-slate-300">
-          <input checked={saveGuidance} className="h-4 w-4 rounded border-slate-600 bg-slate-900" onChange={(event) => setSaveGuidance(event.target.checked)} type="checkbox" />
-          Save these edits as future guidance
+        <label className="mt-4 flex items-start gap-2 text-sm text-slate-300">
+          <input checked={saveGuidance} className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-600 bg-slate-900" onChange={(event) => setSaveGuidance(event.target.checked)} type="checkbox" />
+          <span>
+            <span className="font-medium text-slate-200">Save these edits as a guidance candidate</span>
+            <span className="mt-1 block text-xs leading-5 text-slate-500">
+              Creates a candidate for future voice guidance. It still needs human review before becoming trusted library context — not automatically trusted.
+            </span>
+          </span>
         </label>
-        <p className="mt-2 text-xs leading-5 text-slate-500">
-          When enabled, useful edits can inform future launch drafts and approved founder-voice standards — still human-reviewed; no automatic learning pipeline in this pass.
-        </p>
         <label className="mt-3 grid gap-2">
           <span className="text-[0.62rem] font-bold uppercase tracking-[0.18em] text-slate-400">Review note</span>
           <textarea className={textareaStyles} onChange={(event) => setNote(event.target.value)} placeholder="Notes for operators, launch packet, or learning loop…" value={note} />
@@ -319,7 +361,7 @@ function BariReviewConsole({
         {feedback ? <p className="mt-3 text-sm text-sky-200">{feedback}</p> : null}
       </ControlPanel>
       <div className="grid gap-4">
-        <QueueLane title="Voice Checks" count="4" tone="amber" subtitle="Signals that support founder-voice and claims-safe copy review — guidance, not automatic approval.">
+        <QueueLane count="6" subtitle="Signals support review — not automatic approval." title="Voice checks" tone="amber">
           <SignalList
             items={[
               { label: "Voice confidence", value: "74%", tone: "amber", detail: "Close to approved founder tone." },
@@ -336,17 +378,34 @@ function BariReviewConsole({
             <Diff className="h-4 w-4 text-sky-300" />
             <p className="text-sm font-semibold text-slate-100">Before / after diff</p>
           </div>
-          <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3 text-sm leading-6 text-slate-300">
-            Before: {active.subjectLine ?? "Original founder draft subject."} After: {subjectLine || "No subject set."}
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3">
+              <p className="text-[0.62rem] font-bold uppercase tracking-[0.18em] text-slate-500">Before</p>
+              <p className="mt-2 text-sm leading-6 text-slate-300">{active.subjectLine ?? "Original founder draft subject."}</p>
+            </div>
+            <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3">
+              <p className="text-[0.62rem] font-bold uppercase tracking-[0.18em] text-slate-500">After</p>
+              <p className="mt-2 text-sm leading-6 text-slate-300">{subjectLine || "No subject set."}</p>
+            </div>
           </div>
           <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3 text-sm leading-6 text-slate-300">
-            Learning candidate: Bari prefers grounded encouragement and short CTA framing over aspirational copy. {saveGuidance ? "This review is set to save guidance." : "Guidance saving is currently off."}
+            <p className="text-[0.62rem] font-bold uppercase tracking-[0.18em] text-slate-500">Learning candidate</p>
+            <p className="mt-2">
+              Example note: grounded encouragement and short CTA framing. {saveGuidance ? "This review is set to save a guidance candidate." : "Guidance candidate saving is off."} Human promotion to library is still required.
+            </p>
           </div>
         </ControlPanel>
         <ControlPanel className="p-4">
           <p className="text-sm font-semibold text-slate-100">Linked launch packet</p>
           <p className="mt-2 text-sm text-slate-300">{campaignNameFor(active)}</p>
-          <p className="mt-1 text-xs text-slate-400">{offerFor(active)} · {campaign?.audience ?? "Unknown audience"}</p>
+          <p className="mt-1 text-xs text-slate-400">
+            {offerFor(active)} · {campaign?.audience ?? "Audience not set"}
+          </p>
+          {active.campaignId ? (
+            <Link className="mt-3 inline-flex text-xs font-semibold uppercase tracking-[0.14em] text-sky-300 hover:text-sky-200" href={`/campaigns/${active.campaignId}`}>
+              Open launch packet
+            </Link>
+          ) : null}
         </ControlPanel>
       </div>
     </section>
@@ -386,18 +445,18 @@ function BlueReviewConsole({
   if (!active) {
     return (
       <ControlPanel className="p-6">
-        <p className="text-lg font-semibold text-slate-100">No strategic decisions waiting on Blue.</p>
+        <p className="text-lg font-semibold text-slate-100">No strategy reviews queued.</p>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          Routine launch execution can continue without escalation. When nothing is queued here, operators keep moving the launch packet through internal readiness and manual handoffs.
+          Blue review appears only when strategy, claims, positioning, or offer direction needs escalation. Routine launch execution continues through internal readiness and manual handoffs.
         </p>
       </ControlPanel>
     );
   }
 
   return (
-    <section className="grid gap-4 xl:grid-cols-[0.8fr_1.15fr_0.95fr]">
-      <QueueLane title="Blue Queue" count={items.length} tone="blue" subtitle="Escalation for strategy, positioning, major claims, and big campaign angle — not every operational step.">
-        <ReviewQueueList activeApproval={active} items={items} hrefBase="/reviews/blue" onSelect={(approval) => setSelectedId(approval.id)} />
+    <section className="grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.2fr)_minmax(0,0.95fr)]">
+      <QueueLane count={items.length} subtitle="Strategy / Blue — escalation for positioning and claims, not every operational step." title="Strategy queue" tone="blue">
+        <ReviewQueueList activeApproval={active} items={items} onSelect={(approval) => setSelectedId(approval.id)} />
       </QueueLane>
       <ControlPanel className="p-4">
         <div className="border-b border-slate-800 pb-3">
@@ -407,10 +466,16 @@ function BlueReviewConsole({
         </div>
         <div className="mt-4 grid gap-3">
           {[
-            ["Why this escalates to Blue", active.context ?? "This item touches higher-risk positioning, urgency, or public promise language that needs strategic sign-off before the launch packet advances."],
-            ["AI recommendation", `Recommendation: ${active.recommendedDecision.replace(/_/g, " ")}\nReason: Higher-risk transformation language should be softened before release.`],
-            ["When approved", "Operators can move the launch packet toward internal readiness checks and manual export / handoff prep — still human-triggered; nothing auto-sends."],
-            ["When rejected or changes requested", "Strategic claim, angle, or offer framing stays gated until humans revise and re-queue — no external systems are notified automatically."],
+            ["Why this escalates to Blue", active.context ?? "Higher-risk positioning, urgency, or public promise language needs strategic sign-off before the launch packet advances."],
+            ["AI recommendation", `Recommendation: ${recommendedDecisionLabel(active.recommendedDecision)}\nReason: Align claims and urgency with approved positioning before release.`],
+            [
+              "When approved",
+              "Operators move the packet to internal readiness and handoff checks (YouTube link, Emailmarketing.com, creative, social). All steps stay human-triggered inside the console.",
+            ],
+            [
+              "When rejected or changes requested",
+              "Strategic language stays gated until humans revise and re-queue. Nothing ships externally from this decision — revisions stay in the console.",
+            ],
           ].map(([label, value]) => (
             <div key={label} className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3">
               <p className="text-[0.62rem] font-bold uppercase tracking-[0.18em] text-slate-400">{label}</p>
@@ -471,9 +536,9 @@ function BlueReviewConsole({
         <QueueLane title="This decision affects" count="3" tone="blue" subtitle="Launch packet, offer, and audience context for positioning and claims judgment.">
           <SignalList
             items={[
-              { label: "Launch packet", value: campaignNameFor(active), tone: "blue", detail: "Why it matters: campaign promise must match strategic positioning." },
-              { label: "Offer", value: offerFor(active), tone: "amber", detail: "Why it matters: offer language controls claim boundaries and risk." },
-              { label: "Audience", value: campaign?.audience ?? "Unknown", tone: "purple", detail: "Why it matters: urgency and promise must match audience fit." },
+              { label: "Launch packet", value: campaignNameFor(active), tone: "blue", detail: "Promise and positioning must match the packet narrative." },
+              { label: "Offer / CTA", value: offerFor(active), tone: "amber", detail: "Offer language sets claim boundaries and risk." },
+              { label: "Audience", value: campaign?.audience ?? "Not set", tone: "purple", detail: "Urgency and promise must match audience fit." },
             ]}
           />
         </QueueLane>
@@ -513,38 +578,63 @@ function InternalReviewConsole({
   if (!active) {
     return (
       <ControlPanel className="p-6">
-        <p className="text-lg font-semibold text-slate-100">No internal readiness checks waiting.</p>
+        <p className="text-lg font-semibold text-slate-100">No internal readiness checks queued.</p>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          Launch packet handoffs are clear for now. When items appear here, operators verify scheduling, email brief, creative, social copy, and integration prep before the packet moves forward — all manual until your team acts.
+          Launch packets that need handoff or readiness confirmation will appear here. Nothing auto-sends, auto-posts, or auto-publishes from this tab.
         </p>
       </ControlPanel>
     );
   }
 
   return (
-    <section className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr_1fr]">
-      <QueueLane title="Internal Queue" count={items.length} tone="green" subtitle="Launch readiness: publishing status, handoffs, creative, social, and integration prep — routine gates, not founder escalation.">
-        <ReviewQueueList activeApproval={active} items={items} hrefBase="/reviews/internal" onSelect={(approval) => setSelectedId(approval.id)} />
+    <section className="grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
+      <QueueLane
+        count={items.length}
+        subtitle="YouTube scheduling, Emailmarketing.com, Brandon/creative, social rollout, review gates, and manual tracking — routine internal gates."
+        title="Internal queue"
+        tone="green"
+      >
+        <ReviewQueueList activeApproval={active} items={items} onSelect={(approval) => setSelectedId(approval.id)} />
       </QueueLane>
       <ControlPanel className="p-4">
         <div className="border-b border-slate-800 pb-3">
           <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Launch readiness checklist</p>
-          <p className="mt-2 text-sm font-semibold text-slate-100">Status: Not ready — 2 items need confirmation</p>
+          <p className="mt-2 text-sm font-semibold text-slate-100">Confirm packet handoffs before marking ready</p>
           <p className="mt-2 text-sm text-slate-300">
-            Internal review confirms the launch packet is ready to move: required review gates, audience fit, compliance checks, and manual export / handoff prep. Founder-voice (Bari) and strategy (Blue) rows reflect this packet only when those escalations apply — they are not universal blockers on every launch.
+            Internal review confirms source asset, YouTube scheduling, Emailmarketing.com handoff, creative handoff, social rollout, and review gates. Founder voice / Bari and strategy / Blue appear only when those escalations apply — not universal blockers.
           </p>
         </div>
         <SignalList
           items={[
             { label: "Launch packet brief complete", value: "Ready", tone: "green" },
-            { label: "Copy approved", value: "Ready", tone: "green" },
-            { label: "Founder-voice / Bari gate (if required)", value: active.campaignId === "camp_reactivation_may" ? "Needs check" : "Ready", tone: active.campaignId === "camp_reactivation_may" ? "amber" : "green", detail: "Weekly launch founder email — escalation only." },
-            { label: "Strategy / Blue gate (if required)", value: active.campaignId === "camp_webinar_june" ? "Required" : "Ready", tone: active.campaignId === "camp_webinar_june" ? "red" : "green", detail: "September registration push with strong claims." },
-            { label: "Offer active / approved", value: "Ready", tone: "green" },
-            { label: "Audience confirmed", value: "Needs check", tone: "amber" },
-            { label: "Compliance blockers cleared", value: active.riskLevel === "red" ? "Blocked" : "Needs check", tone: active.riskLevel === "red" ? "red" : "amber" },
-            { label: "Keap export prepared", value: "Manual/demo", tone: "blue" },
-            { label: "Zapier/manual handoff ready", value: "Manual/demo", tone: "blue" },
+            {
+              label: "Source asset selected",
+              value: campaign?.sourceProductionAssetTitle ? "Ready" : "Needs check",
+              tone: campaign?.sourceProductionAssetTitle ? "green" : "amber",
+            },
+            { label: "YouTube scheduled link attached", value: "Needs check", tone: "amber" },
+            { label: "Emailmarketing.com handoff ready", value: "Needs check", tone: "amber" },
+            { label: "Creative / Brandon handoff ready", value: "Needs check", tone: "amber" },
+            { label: "Social rollout notes ready", value: "Ready", tone: "green" },
+            {
+              label: "Founder voice / Bari (if required)",
+              value: active.campaignId === "camp_reactivation_may" ? "Escalation active" : "Not required",
+              tone: active.campaignId === "camp_reactivation_may" ? "amber" : "green",
+              detail: "Escalation only.",
+            },
+            {
+              label: "Strategy / Blue (if required)",
+              value: active.campaignId === "camp_webinar_june" ? "Escalation active" : "Not required",
+              tone: active.campaignId === "camp_webinar_june" ? "amber" : "green",
+              detail: "Escalation only.",
+            },
+            { label: "Audience / source mapping", value: "Needs check", tone: "amber" },
+            {
+              label: "Compliance blockers cleared",
+              value: active.riskLevel === "red" ? "Blocked" : "Needs check",
+              tone: active.riskLevel === "red" ? "red" : "amber",
+            },
+            { label: "Registration / CRM tracking (if needed)", value: "Optional", tone: "gray" },
           ]}
         />
       </ControlPanel>
@@ -556,25 +646,30 @@ function InternalReviewConsole({
             <p className="mt-2 text-sm text-slate-100">{active.actionNeeded}</p>
           </div>
           <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3">
-            <p className="text-[0.62rem] font-bold uppercase tracking-[0.18em] text-slate-400">Linked launch packet</p>
+            <p className="text-[0.62rem] font-bold uppercase tracking-[0.18em] text-slate-400">Launch packet</p>
             <p className="mt-2 text-sm text-slate-100">{campaignNameFor(active)}</p>
+            {active.campaignId ? (
+              <Link className="mt-2 inline-flex text-xs font-semibold uppercase tracking-[0.14em] text-sky-300 hover:text-sky-200" href={`/campaigns/${active.campaignId}`}>
+                Open launch packet
+              </Link>
+            ) : null}
           </div>
           <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3">
             <p className="text-[0.62rem] font-bold uppercase tracking-[0.18em] text-slate-400">Readiness status</p>
-            <p className="mt-2 text-sm text-slate-100">Waiting on final operator confirmation and handoff review.</p>
+            <p className="mt-2 text-sm text-slate-100">Waiting on final operator confirmation before marking the packet ready for handoff.</p>
           </div>
           <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3">
-            <p className="text-[0.62rem] font-bold uppercase tracking-[0.18em] text-slate-400">Blockers</p>
+            <p className="text-[0.62rem] font-bold uppercase tracking-[0.18em] text-slate-400">Readiness context</p>
             <p className="mt-2 text-sm text-slate-300">{active.reason}</p>
           </div>
           <label className="grid gap-2 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3">
-            <span className="text-[0.62rem] font-bold uppercase tracking-[0.18em] text-slate-400">Required actions / note</span>
-            <textarea className={textareaStyles} onChange={(event) => setNote(event.target.value)} value={note} />
+            <span className="text-[0.62rem] font-bold uppercase tracking-[0.18em] text-slate-400">Operator note</span>
+            <textarea className={textareaStyles} onChange={(event) => setNote(event.target.value)} value={note} placeholder="Confirm scheduled link, handoff notes, audience/source mapping, and any manual tracking details…" />
           </label>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           <button disabled={actionsDisabled} onClick={() => void onSaveNote(active, note || "Checklist item marked checked.").then(() => setFeedback("Approval saved.")).catch(() => setFeedback("Unable to update approval. Check Convex connection."))} type="button"><Button variant="secondary">Mark checked</Button></button>
-          <button disabled={actionsDisabled} onClick={() => void onApprove(active, { decisionNotes: note || "Handoff approved for next step." }).then(() => setFeedback("Approval saved.")).catch(() => setFeedback("Unable to update approval. Check Convex connection."))} type="button"><Button><Check className="mr-2 h-4 w-4" /> Approve handoff</Button></button>
+          <button disabled={actionsDisabled} onClick={() => void onApprove(active, { decisionNotes: note || "Readiness approved for next step." }).then(() => setFeedback("Approval saved.")).catch(() => setFeedback("Unable to update approval. Check Convex connection."))} type="button"><Button><Check className="mr-2 h-4 w-4" /> Approve readiness</Button></button>
           <button disabled={actionsDisabled} onClick={() => void onRequestChanges(active, { requestedChanges: note || "Operational changes required before handoff." }).then(() => setFeedback("Changes requested.")).catch(() => setFeedback("Unable to update approval. Check Convex connection."))} type="button"><Button variant="secondary">Request changes</Button></button>
           <button disabled={actionsDisabled} onClick={() => void onReject(active, { decisionNotes: note || "Rejected and blocked from send readiness." }).then(() => setFeedback("Approval saved.")).catch(() => setFeedback("Unable to update approval. Check Convex connection."))} type="button"><Button variant="danger"><X className="mr-2 h-4 w-4" /> Reject</Button></button>
         </div>
@@ -585,94 +680,180 @@ function InternalReviewConsole({
   );
 }
 
-function AllApprovalsTable({ items }: { items: ApprovalItem[] }) {
+const ALL_APPROVAL_FILTERS = [
+  { id: "all", label: "All reviews", pillTone: "purple" as const, test: (_a: ApprovalItem) => true },
+  { id: "internal", label: "Internal", pillTone: "green" as const, test: (a: ApprovalItem) => a.owner === "internal" },
+  { id: "bari", label: "Founder Voice / Bari", pillTone: "amber" as const, test: (a: ApprovalItem) => a.owner === "bari" },
+  { id: "blue", label: "Strategy / Blue", pillTone: "blue" as const, test: (a: ApprovalItem) => a.owner === "blue" },
+  { id: "high_risk", label: "High risk", pillTone: "red" as const, test: (a: ApprovalItem) => a.riskLevel === "red" },
+] as const;
+
+function shortenReviewContext(text: string, max = 140) {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max - 1).trim()}…`;
+}
+
+function AllApprovalsBoard({ items }: { items: ApprovalItem[] }) {
+  const [activeFilterId, setActiveFilterId] = useState<(typeof ALL_APPROVAL_FILTERS)[number]["id"]>("all");
   const [selectedId, setSelectedId] = useState<string | null>(items[0]?.id ?? null);
-  const [activeFilter, setActiveFilter] = useState("All owners");
-  const filteredItems = items.filter((approval) => {
-    if (activeFilter === "All owners") return true;
-    if (activeFilter === "High risk") return approval.riskLevel === "red";
-    return approval.owner === activeFilter.toLowerCase();
-  });
-  const selected = filteredItems.find((item) => item.id === selectedId) ?? filteredItems[0];
+
+  const filteredItems = useMemo(() => {
+    const def = ALL_APPROVAL_FILTERS.find((f) => f.id === activeFilterId) ?? ALL_APPROVAL_FILTERS[0];
+    return items.filter((a) => def.test(a));
+  }, [items, activeFilterId]);
+
+  useEffect(() => {
+    if (filteredItems.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+    if (!selectedId || !filteredItems.some((x) => x.id === selectedId)) {
+      setSelectedId(filteredItems[0].id);
+    }
+  }, [filteredItems, selectedId]);
+
+  const selected = filteredItems.find((x) => x.id === selectedId) ?? null;
   const queueEmpty = items.length === 0;
   const filterEmpty = filteredItems.length === 0;
+
   return (
-    <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-      <ControlPanel className="p-4">
+    <section className="grid gap-4 lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)] lg:items-start">
+      <ControlPanel className="p-4 md:p-5">
         <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-3">
-          {["All owners", "Internal", "Bari", "Blue", "High risk"].map((filter) => (
-            <button key={filter} onClick={() => setActiveFilter(filter)} type="button">
-              <Pill tone={filter === "All owners" ? "purple" : filter === "Bari" ? "amber" : filter === "Blue" ? "blue" : filter === "Internal" ? "green" : "red"}>
-                {filter}
-              </Pill>
+          {ALL_APPROVAL_FILTERS.map((f) => (
+            <button key={f.id} onClick={() => setActiveFilterId(f.id)} type="button">
+              <Pill tone={activeFilterId === f.id ? f.pillTone : "gray"}>{f.label}</Pill>
             </button>
           ))}
         </div>
-        <ConsoleTable className="mt-4">
-          <TableHead>
-            <tr>
-              <Th>Owner</Th>
-              <Th>Type</Th>
-              <Th>Risk</Th>
-              <Th>Status</Th>
-              <Th>Launch packet</Th>
-              <Th>Action needed</Th>
-              <Th>Open</Th>
-            </tr>
-          </TableHead>
-          <tbody>
-            {filterEmpty ? (
-              <tr>
-                <td className="border-t border-slate-800 px-4 py-10 text-center text-sm leading-6 text-slate-400" colSpan={7}>
-                  {queueEmpty
-                    ? "No open approval gates. Current launch packets are clear for now."
-                    : "No approvals match this filter. Try another owner or risk view."}
-                </td>
-              </tr>
-            ) : (
-              filteredItems.map((approval) => (
-                <tr className={selected?.id === approval.id ? "bg-slate-900/80" : ""} key={approval.id} onClick={() => setSelectedId(approval.id)}>
-                  <Td><StatusBadge tone={toneFor(approval.owner, approval.riskLevel)}>{approval.owner}</StatusBadge></Td>
-                  <Td className="text-slate-100">{approval.title}</Td>
-                  <Td><StatusBadge tone={toneFor(approval.owner, approval.riskLevel)}>{approval.riskLevel}</StatusBadge></Td>
-                  <Td className="text-slate-300">{approval.status.replace(/_/g, " ")}</Td>
-                  <Td className="text-slate-300">{campaignNameFor(approval)}</Td>
-                  <Td className="max-w-[18rem] text-slate-300">{approval.reason}</Td>
-                  <Td><Link href={`/reviews/${approval.owner === "internal" ? "internal" : approval.owner}`}><InlineAction>Open</InlineAction></Link></Td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </ConsoleTable>
+        <div className="mt-4 space-y-3">
+          {filterEmpty ? (
+            <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/50 px-4 py-10 text-center text-sm leading-6 text-slate-400">
+              {queueEmpty ? (
+                <>
+                  <p className="font-semibold text-slate-200">No open approvals.</p>
+                  <p className="mt-2">Launch packets with pending review gates will appear here.</p>
+                </>
+              ) : (
+                <p>No approvals match this filter. Try another lane or risk view.</p>
+              )}
+            </div>
+          ) : (
+            filteredItems.map((approval) => (
+              <button
+                key={approval.id}
+                type="button"
+                onClick={() => setSelectedId(approval.id)}
+                className={cn(
+                  "w-full rounded-xl border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50",
+                  selectedId === approval.id
+                    ? "border-sky-500/50 bg-slate-900 shadow-[inset_3px_0_0_0_rgba(56,189,248,0.85)]"
+                    : "border-slate-800 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-900/60",
+                )}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Pill tone={toneFor(approval.owner, approval.riskLevel)}>{reviewLaneShort(approval.owner)}</Pill>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge tone={toneFor(approval.owner, approval.riskLevel)}>{riskDisplayLabel(approval.riskLevel)}</StatusBadge>
+                    <StatusBadge tone="gray">{statusDisplayLabel(approval.status)}</StatusBadge>
+                  </div>
+                </div>
+                <p className="mt-2 text-sm font-semibold text-slate-100">{approval.title}</p>
+                <p className="mt-1 text-xs text-slate-400">{campaignNameFor(approval)}</p>
+                <p className="mt-2 text-xs leading-5 text-slate-500">{shortenReviewContext(`${approval.reason ?? ""}${approval.context ? ` ${approval.context}` : ""}`)}</p>
+                <div className="mt-3 flex flex-wrap items-center gap-3 text-xs font-semibold uppercase tracking-[0.14em]">
+                  <Link
+                    className="text-sky-300 hover:text-sky-200"
+                    href={`/reviews/${approval.owner === "internal" ? "internal" : approval.owner}`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Open in review lane
+                  </Link>
+                  {approval.campaignId ? (
+                    <Link className="text-slate-400 hover:text-slate-200" href={`/campaigns/${approval.campaignId}`} onClick={(e) => e.stopPropagation()}>
+                      Launch packet
+                    </Link>
+                  ) : null}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+        <div className="mt-4 flex items-start gap-3 border-t border-slate-800 pt-4">
+          <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-sky-300" />
+          <p className="text-xs leading-5 text-slate-400">
+            Humans approve public-facing work here. Nothing auto-sends, auto-posts, or auto-publishes from this list. Use Bari or Blue only when an item truly needs founder voice or strategy escalation.
+          </p>
+        </div>
       </ControlPanel>
-      <ControlPanel className="p-4">
-        {filterEmpty ? (
+      <ControlPanel className="p-4 lg:sticky lg:top-24 lg:self-start">
+        {filterEmpty || !selected ? (
           <p className="text-sm leading-6 text-slate-400">
             {queueEmpty
-              ? "No open approval gates. Current launch packets are clear for now."
-              : "No approvals match this filter. Try another owner or risk view."}
+              ? "No open approvals. Launch packets with pending review gates will appear here."
+              : "Select an approval from the list, or broaden your filter."}
           </p>
-        ) : selected ? (
-          <>
+        ) : (
+          <div className="space-y-5">
             <p className="text-sm font-semibold text-slate-100">Selected approval</p>
-            <div className="mt-4 space-y-3 text-sm text-slate-300">
-              <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">Owner: <span className="text-slate-100">{selected.owner}</span></div>
-              <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">Risk: <span className="text-slate-100">{selected.riskLevel}</span></div>
-              <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">Status: <span className="text-slate-100">{selected.status.replace(/_/g, " ")}</span></div>
-              <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">Launch packet: <span className="text-slate-100">{campaignNameFor(selected)}</span></div>
-              <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">Action needed: <span className="text-slate-100">{selected.actionNeeded ?? selected.title}</span></div>
-              <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">Why this gate exists: <span className="text-slate-100">{selected.reason}</span></div>
-              <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">AI recommendation: <span className="text-slate-100">{selected.recommendedDecision.replace(/_/g, " ")}</span></div>
-              <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">
-                Suggested destination:{" "}
-                <Link className="text-sky-300" href={`/reviews/${selected.owner === "internal" ? "internal" : selected.owner}`}>
-                  Open in {selected.owner === "bari" ? "Bari Copy Review" : selected.owner === "blue" ? "Blue Review" : "Internal Approvals"}
-                </Link>
+            <div>
+              <p className="text-[0.65rem] font-bold uppercase tracking-[0.14em] text-slate-500">Summary</p>
+              <div className="mt-2 space-y-2 text-sm text-slate-300">
+                <div className="flex justify-between gap-3 border-b border-slate-800/80 py-1.5">
+                  <span className="text-slate-500">Review lane</span>
+                  <span className="text-right font-medium text-slate-100">{reviewLaneLabel(selected.owner)}</span>
+                </div>
+                <div className="flex justify-between gap-3 border-b border-slate-800/80 py-1.5">
+                  <span className="text-slate-500">Risk</span>
+                  <span className="text-right font-medium text-slate-100">{riskDisplayLabel(selected.riskLevel)}</span>
+                </div>
+                <div className="flex justify-between gap-3 border-b border-slate-800/80 py-1.5">
+                  <span className="text-slate-500">Status</span>
+                  <span className="text-right font-medium text-slate-100">{statusDisplayLabel(selected.status)}</span>
+                </div>
+                <div className="flex justify-between gap-3 py-1.5">
+                  <span className="text-slate-500">Launch packet</span>
+                  <span className="text-right font-medium text-slate-100">{campaignNameFor(selected)}</span>
+                </div>
               </div>
             </div>
-          </>
-        ) : (
-          <p className="text-sm text-slate-300">Select an approval to inspect details.</p>
+            <div>
+              <p className="text-[0.65rem] font-bold uppercase tracking-[0.14em] text-slate-500">Decision needed</p>
+              <div className="mt-2 space-y-3 text-sm text-slate-300">
+                <p>
+                  <span className="font-semibold text-slate-200">Action: </span>
+                  {selected.actionNeeded ?? selected.title}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-200">Why this gate: </span>
+                  {selected.reason}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-200">AI recommendation: </span>
+                  {recommendedDecisionLabel(selected.recommendedDecision)}
+                </p>
+              </div>
+            </div>
+            <div>
+              <p className="text-[0.65rem] font-bold uppercase tracking-[0.14em] text-slate-500">Next step</p>
+              <p className="mt-2 text-sm text-slate-300">Open the specialized review workspace for this lane to approve, edit, or return changes.</p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <Link href={`/reviews/${selected.owner === "internal" ? "internal" : selected.owner}`}>
+                  <Button className="w-full sm:w-auto" variant="secondary">
+                    Open in review lane
+                  </Button>
+                </Link>
+                {selected.campaignId ? (
+                  <Link href={`/campaigns/${selected.campaignId}`}>
+                    <Button className="w-full sm:w-auto" variant="secondary">
+                      Open launch packet
+                    </Button>
+                  </Link>
+                ) : null}
+              </div>
+            </div>
+          </div>
         )}
       </ControlPanel>
     </section>
@@ -720,7 +901,7 @@ export function ReviewRouteSection({ slug }: { slug?: string[] }) {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="mx-auto w-full max-w-7xl space-y-5">
       <SectionHeader
         eyebrow="Human approval"
         title={config.title}
@@ -790,18 +971,7 @@ export function ReviewRouteSection({ slug }: { slug?: string[] }) {
         />
       ) : null}
 
-      {approvalRecords !== undefined && mode === "all" ? <AllApprovalsTable items={filtered} /> : null}
-
-      {approvalRecords !== undefined && mode === "all" ? (
-        <ControlPanel className="p-4">
-          <div className="flex items-start gap-3">
-            <MessageSquare className="mt-0.5 h-4 w-4 text-sky-300" />
-            <p className="text-sm leading-6 text-slate-300">
-              Unified view of open gates for copy, strategy, claims, and launch readiness. Jump into Bari, Blue, or Internal when an item truly needs founder voice or strategic escalation — routing stays the same; nothing auto-executes from this list.
-            </p>
-          </div>
-        </ControlPanel>
-      ) : null}
+      {approvalRecords !== undefined && mode === "all" ? <AllApprovalsBoard items={filtered} /> : null}
 
       {approvalRecords !== undefined && mode === "bari" ? (
         <ControlPanel className="p-4">
@@ -819,7 +989,7 @@ export function ReviewRouteSection({ slug }: { slug?: string[] }) {
           <div className="flex items-start gap-3">
             <ShieldAlert className="mt-0.5 h-4 w-4 text-sky-300" />
             <p className="text-sm leading-6 text-slate-300">
-              Capture what unblocks internal launch readiness, what stays gated, and how this decision should inform future campaigns — decisions are recorded here; operators still perform manual follow-through outside the console.
+              Decisions are recorded here only. Operators still perform Emailmarketing.com, creative, social, and CRM follow-through manually outside the console. Nothing auto-sends or auto-publishes from Blue review.
             </p>
           </div>
         </ControlPanel>

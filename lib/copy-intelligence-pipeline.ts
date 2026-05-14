@@ -15,6 +15,21 @@ export const COPY_INTELLIGENCE_PIPELINE_STAGES = [
   { key: "learning", label: "Learning Feedback", agentId: "learning_feedback_agent", safetyMode: "learning_candidate", purpose: "Candidates only — not auto-approved." },
 ] as const;
 
+export type CopyPipelineStage = (typeof COPY_INTELLIGENCE_PIPELINE_STAGES)[number];
+
+/** UI grouping for the Copy Intelligence pipeline overview (stages stay single source of truth). */
+export const COPY_INTELLIGENCE_PIPELINE_GROUPS: readonly {
+  id: string;
+  label: string;
+  stageKeys: readonly CopyPipelineStage["key"][];
+}[] = [
+  { id: "intake_context", label: "Intake & context", stageKeys: ["intake", "context"] },
+  { id: "strategy_hooks", label: "Strategy & hooks", stageKeys: ["angle", "hooks"] },
+  { id: "drafting", label: "Drafting", stageKeys: ["voice", "cta", "structure", "draft"] },
+  { id: "review_compliance", label: "Review & compliance", stageKeys: ["claims", "rewrite"] },
+  { id: "assembly_learning", label: "Assembly & learning", stageKeys: ["assembly", "routing", "learning"] },
+] as const;
+
 export const COPY_INTELLIGENCE_CONTEXT_BUCKETS = [
   "Copy Archive",
   "Voice & Style",

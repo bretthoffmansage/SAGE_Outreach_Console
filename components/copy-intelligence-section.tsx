@@ -7,8 +7,8 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Braces, ClipboardList, Play, ShieldAlert } from "lucide-react";
 import { useAppUser } from "@/components/auth/app-user-context";
-import { ConsoleTable, ControlPanel, SectionHeader, StatusBadge, TableHead, Td, Th } from "@/components/ui";
-import { COPY_INTELLIGENCE_CONTEXT_BUCKETS, COPY_INTELLIGENCE_PIPELINE_STAGES } from "@/lib/copy-intelligence-pipeline";
+import { ControlPanel, SectionHeader, StatusBadge } from "@/components/ui";
+import { COPY_INTELLIGENCE_CONTEXT_BUCKETS, COPY_INTELLIGENCE_PIPELINE_GROUPS, COPY_INTELLIGENCE_PIPELINE_STAGES } from "@/lib/copy-intelligence-pipeline";
 import { cn } from "@/lib/utils";
 
 const btnBase =
@@ -58,6 +58,17 @@ function safeParseJson(raw?: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+function formatSafetyMode(mode?: string) {
+  if (!mode) return "—";
+  const map: Record<string, string> = {
+    read_only: "Read-only",
+    draft_only: "Draft-only",
+    review_assist: "Review assist",
+    learning_candidate: "Learning candidate",
+  };
+  return map[mode] ?? mode.replace(/_/g, " ");
 }
 
 export function CopyIntelligenceSection() {
@@ -149,7 +160,7 @@ export function CopyIntelligenceSection() {
   const pipelineLastAt = latestPipelineForSelection?.finishedAt ?? latestPipelineForSelection?.startedAt;
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6">
       <SectionHeader
         eyebrow="Intelligence"
         title="Copy Intelligence"
@@ -163,23 +174,24 @@ export function CopyIntelligenceSection() {
         {outputParsed?.externalModelCall === false ? <StatusBadge tone="blue">No external model call (dry run)</StatusBadge> : null}
       </div>
 
-      <ControlPanel className="border-slate-800 bg-slate-950/60 p-4">
-        <p className="text-sm font-semibold text-slate-100">Future Meta and platform context</p>
-        <p className="mt-2 text-sm leading-relaxed text-slate-300">
-          Meta performance and trend insights can eventually inform hooks, CTAs, topics, and creative patterns here. Only reviewed or approved platform insights
-          should become trusted context; manual and demo signals stay labeled. Meta insights do not replace human judgment or compliance review — and this phase
-          has no live Meta connector.
-        </p>
-        <p className="mt-2 text-xs text-slate-500">
-          See <Link className="text-sky-400 hover:underline" href="/intelligence/platform-connector">Platform Connector Intelligence</Link> and{" "}
-          <Link className="text-sky-400 hover:underline" href="/intelligence/performance">Performance Intelligence</Link> for structured signals.
+      <ControlPanel className="border-slate-800 bg-slate-950/60 p-3">
+        <p className="text-xs leading-relaxed text-slate-400">
+          Future Meta and platform context may inform hooks and CTAs here — only reviewed or approved signals become trusted context. This phase has no live Meta connector. See{" "}
+          <Link className="text-sky-400 hover:underline" href="/intelligence/platform-connector">
+            Platform Connector
+          </Link>{" "}
+          and{" "}
+          <Link className="text-sky-400 hover:underline" href="/intelligence/performance">
+            Performance Intelligence
+          </Link>
+          .
         </p>
       </ControlPanel>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <ControlPanel className="p-4">
-          <p className="text-sm font-semibold text-slate-100">Campaign</p>
-          <p className="mt-1 text-xs text-slate-500">Select a Weekly Launch Packet to anchor inputs. Deep links use <code className="text-sky-300">?campaign=</code>.</p>
+          <p className="text-sm font-semibold text-slate-100">Launch packet context</p>
+          <p className="mt-1 text-xs text-slate-500">Select a Weekly Launch Packet first — deep links use <code className="text-sky-300">?campaign=</code>.</p>
           {!selectedCampaignId ? (
             <p className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
               No campaign selected. Choose a launch packet before running Copy Intelligence.
@@ -211,7 +223,7 @@ export function CopyIntelligenceSection() {
                 <dd className="text-right text-slate-200">{campaignRow.sourceProductionAssetTitle?.trim() || "—"}</dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt>Readiness</dt>
+                <dt>Launch readiness</dt>
                 <dd className="text-slate-200">{campaignRow.readinessStatus?.trim() || "—"}</dd>
               </div>
               <div className="flex justify-between gap-2">
@@ -229,16 +241,16 @@ export function CopyIntelligenceSection() {
               Campaigns
             </Link>
             <Link className={btnGhost} href="/intelligence/langgraph">
-              LangGraph map
+              Runtime map
             </Link>
           </div>
         </ControlPanel>
 
         <ControlPanel className="p-4">
-          <p className="text-sm font-semibold text-slate-100">Output focus</p>
-          <p className="mt-1 text-xs text-slate-500">Selects the dry-run focus label stored on the run; full pipeline shape is always returned.</p>
+          <p className="text-sm font-semibold text-slate-100">Draft controls</p>
+          <p className="mt-1 text-xs text-slate-500">Output focus selects the dry-run label stored on the run; the full pipeline shape is still returned.</p>
           <label className="mt-3 grid gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Output type</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Output focus</span>
             <select
               className="console-field-control focus-ring w-full rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-slate-100"
               onChange={(e) => setOutputType(e.target.value)}
@@ -257,6 +269,7 @@ export function CopyIntelligenceSection() {
               className={btnPrimary}
               disabled={runBusy || !selectedCampaignId}
               onClick={() => void runPipeline(outputType)}
+              title={!selectedCampaignId ? "Select a launch packet to run a dry test." : "Dry-run only — no auto-post or auto-send."}
               type="button"
             >
               <Play className="h-4 w-4 shrink-0" />
@@ -267,14 +280,16 @@ export function CopyIntelligenceSection() {
                 className={btnSecondary}
                 disabled={runBusy || !selectedCampaignId}
                 onClick={() => void runPipeline("reels_hooks")}
+                title="Dry-run Hook Lab focus — draft-only."
                 type="button"
               >
-                Run Hook Lab
+                Hook Lab dry run
               </button>
               <button
                 className={btnSecondary}
                 disabled={runBusy || !selectedCampaignId}
                 onClick={() => void runPipeline("claims_voice_review")}
+                title="Dry-run voice + claims review — review assist only."
                 type="button"
               >
                 Voice + claims review
@@ -283,58 +298,63 @@ export function CopyIntelligenceSection() {
                 className={btnSecondary}
                 disabled={runBusy || !selectedCampaignId}
                 onClick={() => void runPipeline("full_launch_copy_packet")}
+                title="Dry-run full draft packet — human approval still required before publish."
                 type="button"
               >
                 Generate draft packet
               </button>
             </div>
+            <p className="text-xs text-slate-500">Draft-only. No campaign fields are overwritten unless manually applied later.</p>
             {runMessage ? <p className="text-xs text-slate-300">{runMessage}</p> : null}
           </div>
         </ControlPanel>
       </div>
 
-      <ControlPanel className="p-4">
+      <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-slate-100">Copy agent stack</p>
+          <p className="text-sm font-semibold text-slate-100">Pipeline &amp; layers</p>
           <StatusBadge tone="gray">{copyConfigs?.length ?? 0} agents configured</StatusBadge>
         </div>
-        <p className="mt-1 text-xs text-slate-500">
-          Specialized layers — not a single generic writer. Orchestrator: <code className="text-sky-300">copy_pipeline</code>.
+        <p className="text-xs text-slate-500">
+          Stages are grouped for readability — orchestrator remains <code className="text-sky-300">copy_pipeline</code>.
         </p>
-        <div className="mt-4 overflow-x-auto">
-          <ConsoleTable>
-            <TableHead>
-              <tr>
-                <Th>Stage</Th>
-                <Th>Agent</Th>
-                <Th>Purpose</Th>
-                <Th>Safety</Th>
-                <Th>Status</Th>
-                <Th>Last pipeline run</Th>
-              </tr>
-            </TableHead>
-            <tbody>
-              {COPY_INTELLIGENCE_PIPELINE_STAGES.map((stage) => {
-                const cfg = copyConfigs?.find((c: { agentId: string }) => c.agentId === stage.agentId);
-                return (
-                  <tr className="border-t border-slate-800" key={stage.key}>
-                    <Td className="font-medium text-slate-200">{stage.label}</Td>
-                    <Td className="text-slate-300">{cfg?.displayName ?? stage.agentId}</Td>
-                    <Td className="max-w-[220px] text-xs text-slate-400">{stage.purpose}</Td>
-                    <Td>
-                      <StatusBadge tone="amber">{stage.safetyMode}</StatusBadge>
-                    </Td>
-                    <Td>
-                      <StatusBadge tone={cfg?.enabled === false ? "gray" : "green"}>{cfg?.enabled === false ? "Disabled" : "Ready"}</StatusBadge>
-                    </Td>
-                    <Td className="text-xs text-slate-500">{formatWhen(pipelineLastAt)}</Td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </ConsoleTable>
+        <div className="space-y-2">
+          {COPY_INTELLIGENCE_PIPELINE_GROUPS.map((group) => {
+            const stages = COPY_INTELLIGENCE_PIPELINE_STAGES.filter((s) => (group.stageKeys as readonly string[]).includes(s.key));
+            const ready = stages.filter((s) => copyConfigs?.find((c: { agentId: string; enabled?: boolean }) => c.agentId === s.agentId)?.enabled !== false).length;
+            return (
+              <details className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/55" key={group.id} open={group.id === "intake_context"}>
+                <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-slate-100 marker:content-none hover:bg-slate-900/50 [&::-webkit-details-marker]:hidden">
+                  {group.label}
+                  <span className="ml-2 text-xs font-normal text-slate-500">
+                    {stages.length} stages · {ready}/{stages.length} enabled
+                  </span>
+                </summary>
+                <div className="border-t border-slate-800 px-4 py-3">
+                  <ul className="space-y-2 text-xs text-slate-300">
+                    {stages.map((stage) => {
+                      const cfg = copyConfigs?.find((c: { agentId: string }) => c.agentId === stage.agentId);
+                      return (
+                        <li className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2" key={stage.key}>
+                          <div>
+                            <p className="font-semibold text-slate-100">{cfg?.displayName ?? stage.agentId}</p>
+                            <p className="mt-0.5 text-[0.7rem] leading-snug text-slate-500">{stage.purpose}</p>
+                          </div>
+                          <div className="flex flex-wrap items-center justify-end gap-1">
+                            <StatusBadge tone="amber">{formatSafetyMode(stage.safetyMode)}</StatusBadge>
+                            <StatusBadge tone={cfg?.enabled === false ? "gray" : "green"}>{cfg?.enabled === false ? "Disabled" : "Ready"}</StatusBadge>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <p className="mt-2 text-[0.65rem] text-slate-600">Last pipeline dry test: {formatWhen(pipelineLastAt)}</p>
+                </div>
+              </details>
+            );
+          })}
         </div>
-      </ControlPanel>
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <ControlPanel className="p-4">
@@ -347,25 +367,17 @@ export function CopyIntelligenceSection() {
           {linkedAsset ? (
             <dl className="mt-3 grid gap-2 text-xs text-slate-400">
               <div>
-                <dt className="text-slate-500">Title</dt>
+                <dt className="text-slate-500">Source asset title</dt>
                 <dd className="text-slate-200">{linkedAsset.title}</dd>
               </div>
-              <div>
-                <dt className="text-slate-500">Transcript</dt>
-                <dd className="text-slate-200">
-                  {linkedAsset.transcriptSummary?.trim()
-                    ? linkedAsset.transcriptSummary.length > 160
-                      ? `${linkedAsset.transcriptSummary.slice(0, 160)}…`
-                      : linkedAsset.transcriptSummary
-                    : "—"}
-                </dd>
-              </div>
               <div className="flex flex-wrap gap-3">
-                <span>Status: {linkedAsset.transcriptStatus ?? "—"}</span>
+                <span>Transcript: {linkedAsset.transcriptStatus ?? "—"}</span>
+                <span>Shorts: {linkedAsset.readyShortsCount ?? 0}/{linkedAsset.shortsCount ?? 0}</span>
                 <span>Thumbnail: {linkedAsset.thumbnailStatus ?? "—"}</span>
-                <span>
-                  Shorts: {linkedAsset.readyShortsCount ?? 0}/{linkedAsset.shortsCount ?? 0}
-                </span>
+              </div>
+              <div>
+                <dt className="text-slate-500">Production readiness</dt>
+                <dd className="text-slate-200">{linkedAsset.readinessStatus ?? linkedAsset.status ?? "—"}</dd>
               </div>
               {linkedAsset.notes?.trim() ? (
                 <div>
@@ -382,7 +394,7 @@ export function CopyIntelligenceSection() {
         <ControlPanel className="p-4">
           <p className="text-sm font-semibold text-slate-100">Context sources (Content Library)</p>
           <p className="mt-1 text-xs text-slate-500">
-            Retrieval uses trust rules in dry-run: active/approved as trusted, drafts labeled caution, swipe as inspiration-only, rejected/archived excluded.
+            Approved/active Library records are trusted context. Draft or candidate records stay labeled; Swipe File is inspiration-only.
           </p>
           <ul className="mt-3 list-inside list-disc space-y-1 text-xs text-slate-400">
             {COPY_INTELLIGENCE_CONTEXT_BUCKETS.map((b) => (
@@ -401,7 +413,7 @@ export function CopyIntelligenceSection() {
           <p className="mt-1 text-xs text-slate-500">Recent runs with <code className="text-sky-300">groupId: copy_intelligence</code>. Nothing here auto-writes packet fields.</p>
           <div className="mt-4 max-h-72 overflow-y-auto rounded-lg border border-slate-800">
             {runs.length === 0 ? (
-              <p className="p-3 text-xs text-slate-500">No copy runs yet. Run a dry test after selecting a campaign.</p>
+              <p className="p-3 text-xs text-slate-500">No copy runs yet. Select a launch packet and run a dry test.</p>
             ) : (
               runs.map((r) => (
                 <button
@@ -418,7 +430,7 @@ export function CopyIntelligenceSection() {
                     {r.campaignId ?? "—"} · {r.status} · {formatWhen(r.startedAt)}
                   </span>
                   <span className="flex flex-wrap gap-1 pt-1">
-                    {r.safetyMode ? <StatusBadge tone="amber">{String(r.safetyMode)}</StatusBadge> : null}
+                    {r.safetyMode ? <StatusBadge tone="amber">{formatSafetyMode(String(r.safetyMode))}</StatusBadge> : null}
                     {r.appliedToCampaign ? <StatusBadge tone="green">Applied to campaign</StatusBadge> : <StatusBadge tone="gray">Not applied</StatusBadge>}
                     {r.reviewRequired ? <StatusBadge tone="amber">Review required</StatusBadge> : null}
                   </span>
@@ -434,7 +446,7 @@ export function CopyIntelligenceSection() {
             <p className="text-sm font-semibold text-slate-100">Draft output inspector</p>
           </div>
           {!selectedRun ? (
-            <p className="mt-3 text-xs text-slate-500">Select a run from history.</p>
+            <p className="mt-3 text-xs text-slate-500">Select a run to inspect draft output.</p>
           ) : (
             <div className="mt-3 space-y-3 text-xs">
               <p className="text-slate-400">
@@ -484,20 +496,15 @@ export function CopyIntelligenceSection() {
         </ControlPanel>
       </div>
 
-      <ControlPanel className="p-4">
+      <ControlPanel className="p-3">
         <div className="flex items-center gap-2">
           <ShieldAlert className="h-4 w-4 text-amber-300" />
           <p className="text-sm font-semibold text-slate-100">Safety and approvals</p>
         </div>
-        <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-slate-400">
-          <li>Copy Intelligence produces drafts, suggestions, and review notes only.</li>
-          <li>Blue / Bari suggestions are sparse and reason-based — never auto-assigned.</li>
-          <li>Learning candidates stay unapproved until a human promotes them in the Library.</li>
-          <li>
-            Labels used on runs: <code className="text-sky-300">draft_only</code>, <code className="text-sky-300">read_only</code>,{" "}
-            <code className="text-sky-300">review_assist</code>, <code className="text-sky-300">learning_candidate</code>.
-          </li>
-        </ul>
+        <p className="mt-2 text-xs leading-relaxed text-slate-400">
+          Copy Intelligence creates draft copy, suggestions, and review notes only. Humans approve final public-facing copy. Nothing auto-sends, posts, publishes, or
+          overwrites launch packet fields. Run labels include Read-only, Draft-only, Review assist, and Learning candidate — all human approval gated.
+        </p>
       </ControlPanel>
     </div>
   );

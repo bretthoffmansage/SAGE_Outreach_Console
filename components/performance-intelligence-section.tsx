@@ -2,7 +2,6 @@
 
 import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppUser } from "@/components/auth/app-user-context";
@@ -22,7 +21,6 @@ const btnBase =
   "focus-ring inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition disabled:opacity-60";
 const btnPrimary = `${btnBase} border border-sky-500/60 bg-sky-500 text-slate-950 hover:bg-sky-400`;
 const btnSecondary = `${btnBase} border border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800`;
-const btnGhost = `${btnBase} border border-transparent bg-transparent text-slate-300 hover:bg-slate-900`;
 
 const FUTURE_INTEGRATIONS = [
   { name: "YouTube Analytics", mode: "Planned · read-only future" },
@@ -120,6 +118,80 @@ function toneForSource(s: string) {
   if (s === "manual" || s === "import") return "blue";
   if (s.endsWith("_future")) return "gray";
   return "gray";
+}
+
+function titleCaseSnake(s: string): string {
+  if (!s) return "";
+  return s.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+function humanizePerformancePlatform(p: string): string {
+  const k = p.trim().toLowerCase();
+  const map: Record<string, string> = {
+    meta_ads: "Meta Ads",
+    instagram: "Instagram",
+    facebook: "Facebook",
+    meta: "Meta",
+    youtube: "YouTube",
+    youtube_shorts: "YouTube Shorts",
+    email: "Email",
+    tiktok: "TikTok",
+    x: "X",
+    pinterest: "Pinterest",
+    linkedin: "LinkedIn",
+    keap: "Keap",
+    landing_page: "Landing page",
+    registration_page: "Registration page",
+    mixed: "Mixed",
+    manual: "Manual",
+    other: "Other",
+  };
+  return map[k] ?? titleCaseSnake(p);
+}
+
+function humanizeSourceOrModeLabel(s: string): string {
+  const k = s.toLowerCase();
+  if (k === "demo") return "Demo";
+  if (k === "manual") return "Manual";
+  if (k === "import" || k === "imported") return "Imported";
+  if (k === "read_only_sync") return "Read-only sync";
+  if (k === "read_only_future") return "Read-only future";
+  if (k === "estimated") return "Estimated";
+  if (k === "planned") return "Planned";
+  if (k === "partial") return "Partial";
+  if (k === "verified") return "Verified";
+  if (k === "needs_review") return "Needs review";
+  if (k === "complete") return "Complete";
+  if (k === "draft") return "Draft";
+  if (k === "stale") return "Stale";
+  if (k === "error") return "Error";
+  if (k.endsWith("_future")) {
+    const base = k.replace(/_future$/, "");
+    return `${titleCaseSnake(base)} (planned)`;
+  }
+  return titleCaseSnake(s);
+}
+
+function humanizeMetricStatusLabel(s: string): string {
+  return humanizeSourceOrModeLabel(s);
+}
+
+function humanizeReviewStatusLabel(s: string): string {
+  const k = s.toLowerCase();
+  if (k === "approved") return "Approved";
+  if (k === "draft") return "Draft";
+  if (k === "pending") return "Pending";
+  return titleCaseSnake(s);
+}
+
+function humanizeDataSourcesCell(raw: string): string {
+  if (!raw.trim()) return "—";
+  return raw
+    .split(/[,;]/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map(humanizeSourceOrModeLabel)
+    .join(" · ");
 }
 
 function groupSum<T extends Record<string, unknown>>(
@@ -261,7 +333,7 @@ export function PerformanceIntelligenceSection() {
       engagement,
       campaignsTracked: campaignsTracked.size,
       needsReview,
-      topPlatform: nzStr(topPlat?.platform) || "—",
+      topPlatform: humanizePerformancePlatform(nzStr(topPlat?.platform)) || "—",
       bestTopic: topics[0]?.label ?? "—",
       bestHook: hooks[0]?.label ?? "—",
       bestCta: ctas[0]?.label ?? "—",
@@ -292,8 +364,8 @@ export function PerformanceIntelligenceSection() {
       engagement += nzNum(r.engagement) || nzNum(r.likes) + nzNum(r.comments) + nzNum(r.shares) + nzNum(r.saves);
       registrations += nzNum(r.registrations);
       spend += nzNum(r.spend);
-      if (r.sourceMode) sourceHints.add(nzStr(r.sourceMode));
-      if (r.sourceSystem) sourceHints.add(nzStr(r.sourceSystem));
+      if (r.sourceMode) sourceHints.add(humanizeSourceOrModeLabel(nzStr(r.sourceMode)));
+      if (r.sourceSystem) sourceHints.add(humanizeSourceOrModeLabel(nzStr(r.sourceSystem)));
     }
     return { snapCount, reach, clicks, engagement, registrations, spend, sourceHints: [...sourceHints].join(", ") || "—" };
   }, [metaSlice]);
@@ -534,11 +606,11 @@ export function PerformanceIntelligenceSection() {
     "w-full rounded-md border border-slate-700 bg-slate-950/90 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-500";
 
   return (
-    <div className="space-y-5">
+    <div className="mx-auto max-w-7xl space-y-5">
       <SectionHeader
         eyebrow="Performance Intelligence"
         title="Performance Intelligence"
-        description="Track campaign results, compare launch patterns, and turn performance evidence into reusable marketing learnings."
+        description="Track campaign results, compare launch patterns, and turn performance evidence into reviewable campaign learnings."
       />
 
       <div className="flex flex-wrap gap-2">
@@ -557,45 +629,9 @@ export function PerformanceIntelligenceSection() {
           Meta, Facebook, Instagram, and Meta Ads data can be entered manually today. Future read-only connector support can pull insights into Performance
           Intelligence. Write actions such as ad creation, campaign edits, and budget changes are not enabled.
         </p>
-      </ControlPanel>
-
-      <ControlPanel className="p-4">
-        <p className="text-sm font-semibold text-slate-100">Meta / Instagram / Facebook (manual slice)</p>
-        <p className="mt-1 text-xs text-slate-500">Aggregates snapshots in this view whose platform is meta, facebook, instagram, or meta_ads — not a live connector.</p>
-        {metaTotals.snapCount === 0 ? (
-          <p className="mt-3 text-sm text-slate-400">No Meta performance snapshots yet in the current filters.</p>
-        ) : (
-          <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-slate-500">Manual snapshots</dt>
-              <dd className="text-lg font-semibold text-slate-100">{metaTotals.snapCount}</dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-slate-500">Source labels (modes / systems)</dt>
-              <dd className="text-slate-300">{metaTotals.sourceHints}</dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-slate-500">Reach + impressions</dt>
-              <dd className="text-lg font-semibold text-slate-100">{metaTotals.reach}</dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-slate-500">Clicks</dt>
-              <dd className="text-lg font-semibold text-slate-100">{metaTotals.clicks}</dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-slate-500">Engagement (stored or derived)</dt>
-              <dd className="text-lg font-semibold text-slate-100">{metaTotals.engagement}</dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-slate-500">Registrations</dt>
-              <dd className="text-lg font-semibold text-slate-100">{metaTotals.registrations}</dd>
-            </div>
-            <div className="sm:col-span-2">
-              <dt className="text-xs uppercase tracking-wide text-slate-500">Spend (if entered)</dt>
-              <dd className="text-lg font-semibold text-slate-100">{metaTotals.spend > 0 ? metaTotals.spend : "—"}</dd>
-            </div>
-          </dl>
-        )}
+        <p className="mt-3 text-sm leading-relaxed text-slate-400">
+          Source labels, snapshot rows, and learning candidates are not trusted until reviewed and approved in Campaign Learnings.
+        </p>
       </ControlPanel>
 
       <ControlPanel className="p-4">
@@ -618,7 +654,7 @@ export function PerformanceIntelligenceSection() {
               <option value="">All</option>
               {PLATFORMS.map((p) => (
                 <option key={p} value={p}>
-                  {p}
+                  {humanizePerformancePlatform(p)}
                 </option>
               ))}
             </select>
@@ -629,7 +665,7 @@ export function PerformanceIntelligenceSection() {
               <option value="">All</option>
               {CONTENT_TYPES.map((p) => (
                 <option key={p} value={p}>
-                  {p}
+                  {titleCaseSnake(p)}
                 </option>
               ))}
             </select>
@@ -640,7 +676,7 @@ export function PerformanceIntelligenceSection() {
               <option value="">All</option>
               {SOURCE_SYSTEMS.map((p) => (
                 <option key={p} value={p}>
-                  {p}
+                  {humanizeSourceOrModeLabel(p)}
                 </option>
               ))}
             </select>
@@ -651,7 +687,7 @@ export function PerformanceIntelligenceSection() {
               <option value="">All</option>
               {METRIC_STATUSES.map((p) => (
                 <option key={p} value={p}>
-                  {p}
+                  {humanizeMetricStatusLabel(p)}
                 </option>
               ))}
             </select>
@@ -676,13 +712,11 @@ export function PerformanceIntelligenceSection() {
           <button className={btnSecondary} onClick={() => void runDry()} type="button">
             Run performance review dry-run
           </button>
-          <Link className={btnGhost} href="/intelligence/copy">
-            Copy Intelligence
-          </Link>
-          <Link className={btnGhost} href="/operations/integrations">
-            Operations — integrations
-          </Link>
         </div>
+        <p className="mt-3 text-xs leading-relaxed text-slate-500">
+          Future connectors and Copy Intelligence can use reviewed performance signals once approved — use the Intelligence tab bar to open those views when
+          needed.
+        </p>
         {dryMessage ? <p className="mt-2 text-sm text-slate-400">{dryMessage}</p> : null}
       </ControlPanel>
 
@@ -731,16 +765,44 @@ export function PerformanceIntelligenceSection() {
       </section>
 
       <ControlPanel className="p-4">
-        <p className="text-sm font-semibold text-slate-100">Future integrations</p>
-        <p className="mt-1 text-xs text-slate-500">Planned read-only connectors — not connected in this build.</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {FUTURE_INTEGRATIONS.map((row) => (
-            <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2" key={row.name}>
-              <p className="text-sm text-slate-200">{row.name}</p>
-              <p className="mt-1 text-xs text-slate-500">{row.mode}</p>
+        <p className="text-sm font-semibold text-slate-100">Meta / Instagram / Facebook (manual slice)</p>
+        <p className="mt-1 text-xs text-slate-500">
+          Aggregates snapshots whose platform is Meta, Facebook, Instagram, or Meta Ads in this view — not a live connector.
+        </p>
+        {metaTotals.snapCount === 0 ? (
+          <p className="mt-3 text-sm text-slate-400">No Meta performance snapshots yet in the current filters.</p>
+        ) : (
+          <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-slate-500">Manual snapshots</dt>
+              <dd className="text-lg font-semibold text-slate-100">{metaTotals.snapCount}</dd>
             </div>
-          ))}
-        </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-slate-500">Source labels (modes / systems)</dt>
+              <dd className="text-slate-300">{metaTotals.sourceHints}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-slate-500">Reach + impressions</dt>
+              <dd className="text-lg font-semibold text-slate-100">{metaTotals.reach}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-slate-500">Clicks</dt>
+              <dd className="text-lg font-semibold text-slate-100">{metaTotals.clicks}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-slate-500">Engagement (stored or derived)</dt>
+              <dd className="text-lg font-semibold text-slate-100">{metaTotals.engagement}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-slate-500">Registrations</dt>
+              <dd className="text-lg font-semibold text-slate-100">{metaTotals.registrations}</dd>
+            </div>
+            <div className="sm:col-span-2">
+              <dt className="text-xs uppercase tracking-wide text-slate-500">Spend (if entered)</dt>
+              <dd className="text-lg font-semibold text-slate-100">{metaTotals.spend > 0 ? metaTotals.spend : "—"}</dd>
+            </div>
+          </dl>
+        )}
       </ControlPanel>
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -763,22 +825,20 @@ export function PerformanceIntelligenceSection() {
               {(platformSummaries ?? []).length ? (
                 (platformSummaries ?? []).map((p: Record<string, unknown>) => (
                   <tr key={nzStr(p.platform)}>
-                    <Td>{nzStr(p.platform)}</Td>
+                    <Td>{humanizePerformancePlatform(nzStr(p.platform))}</Td>
                     <Td>{nzNum(p.contentCount)}</Td>
                     <Td>{nzNum(p.viewsOrImpressions)}</Td>
                     <Td>{nzNum(p.clicks)}</Td>
                     <Td>{nzNum(p.registrations)}</Td>
                     <Td>{nzNum(p.engagement)}</Td>
-                    <Td className="max-w-[10rem] whitespace-normal text-xs text-slate-400">{nzStr(p.dataSources)}</Td>
+                    <Td className="max-w-[12rem] whitespace-normal text-xs text-slate-400">{humanizeDataSourcesCell(nzStr(p.dataSources))}</Td>
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td className="border-t border-slate-800 px-4 py-3 align-top text-slate-200" colSpan={7}>
                     <p className="text-sm text-slate-400">No performance snapshots yet.</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Add manual metrics for a launch campaign or connect future analytics integrations through Operations.
-                    </p>
+                    <p className="mt-1 text-xs text-slate-500">Add manual snapshots in this view to populate aggregates. Planned read-only connectors are not wired in this build.</p>
                   </td>
                 </tr>
               )}
@@ -811,7 +871,7 @@ export function PerformanceIntelligenceSection() {
                       <Td>{nzNum(c.totalViews)}</Td>
                       <Td>{nzNum(c.totalClicks) + nzNum(c.totalEmailClicks)}</Td>
                       <Td>{nzNum(c.totalRegistrations)}</Td>
-                      <Td className="text-xs">{nzStr(c.topPlatformByViews) || "—"}</Td>
+                      <Td className="text-xs">{humanizePerformancePlatform(nzStr(c.topPlatformByViews)) || "—"}</Td>
                     </tr>
                   ))
               ) : (
@@ -849,7 +909,10 @@ export function PerformanceIntelligenceSection() {
               </ul>
             </div>
           </div>
-          <p className="mt-3 text-xs text-slate-500">Content types: {totals.contentTypeRows.map((r) => `${r.label} (${Math.round(r.views ?? 0)} views)`).join(" · ") || "—"}</p>
+          <p className="mt-3 text-xs text-slate-500">
+            Content types:{" "}
+            {totals.contentTypeRows.map((r) => `${titleCaseSnake(r.label)} (${Math.round(r.views ?? 0)} views)`).join(" · ") || "—"}
+          </p>
         </ControlPanel>
 
         <ControlPanel className="p-4">
@@ -858,12 +921,12 @@ export function PerformanceIntelligenceSection() {
           <ul className="mt-3 max-h-56 space-y-2 overflow-y-auto text-sm">
             {(reviews ?? []).map((r: Record<string, unknown>) => (
               <li className="rounded border border-slate-800 bg-slate-950/50 p-2" key={nzStr(r.reviewId)}>
-                <p className="font-medium text-slate-200">{nzStr(r.reviewType).replace(/_/g, " ")}</p>
+                <p className="font-medium text-slate-200">{titleCaseSnake(nzStr(r.reviewType))}</p>
                 <p className="text-xs text-slate-500">{nzStr(r.campaignName) || nzStr(r.campaignId) || "All campaigns"}</p>
                 <p className="mt-1 text-xs text-slate-400 line-clamp-2">{nzStr(r.summary)}</p>
                 <div className="mt-1 flex flex-wrap gap-1">
-                  <StatusBadge tone={r.status === "approved" ? "green" : "amber"}>{nzStr(r.status)}</StatusBadge>
-                  {r.sourceMode ? <StatusBadge tone="gray">{nzStr(r.sourceMode)}</StatusBadge> : null}
+                  <StatusBadge tone={r.status === "approved" ? "green" : "amber"}>{humanizeReviewStatusLabel(nzStr(r.status))}</StatusBadge>
+                  {r.sourceMode ? <StatusBadge tone="gray">{humanizeSourceOrModeLabel(nzStr(r.sourceMode))}</StatusBadge> : null}
                 </div>
               </li>
             ))}
@@ -877,7 +940,7 @@ export function PerformanceIntelligenceSection() {
           <p className="mt-2 text-sm text-slate-400">Loading…</p>
         ) : !rows.length ? (
           <p className="mt-2 text-sm text-slate-400">
-            No performance snapshots yet. Add manual metrics for a launch campaign or connect future analytics integrations through Operations.
+            No performance snapshots yet. Add manual entries with &quot;Add Performance Snapshot&quot; to build this table.
           </p>
         ) : (
           <ConsoleTable className="mt-3">
@@ -898,16 +961,18 @@ export function PerformanceIntelligenceSection() {
                 <tr key={r.snapshotId}>
                   <Td className="max-w-[14rem] whitespace-normal">{nzStr(r.contentTitle) || r.snapshotId}</Td>
                   <Td className="text-xs">{nzStr(r.campaignName) || nzStr(r.campaignId) || "—"}</Td>
-                  <Td>{r.platform}</Td>
+                  <Td>{humanizePerformancePlatform(nzStr(r.platform))}</Td>
                   <Td className="text-xs">{r.metricDate}</Td>
                   <Td className="max-w-[12rem] whitespace-normal text-xs text-slate-400">
                     v:{nzNum(r.views) || nzNum(r.impressions)} · clk:{nzNum(r.clicks) + nzNum(r.emailClicks)} · reg:{nzNum(r.registrations)}
                   </Td>
                   <Td>
-                    <StatusBadge tone={toneForSource(r.sourceSystem)}>{r.sourceSystem}</StatusBadge>
+                    <StatusBadge tone={toneForSource(nzStr(r.sourceSystem))}>{humanizeSourceOrModeLabel(nzStr(r.sourceSystem))}</StatusBadge>
                   </Td>
                   <Td>
-                    <StatusBadge tone={toneForStatus(nzStr(r.metricStatus))}>{nzStr(r.metricStatus) || "unset"}</StatusBadge>
+                    <StatusBadge tone={toneForStatus(nzStr(r.metricStatus))}>
+                      {humanizeMetricStatusLabel(nzStr(r.metricStatus) || "unset")}
+                    </StatusBadge>
                   </Td>
                   <Td>
                     <button className="text-sky-300 hover:underline" onClick={() => openEdit(r)} type="button">
@@ -924,9 +989,7 @@ export function PerformanceIntelligenceSection() {
       <div className="grid gap-4 xl:grid-cols-2">
         <ControlPanel className="p-4">
           <p className="text-sm font-semibold text-slate-100">Learning candidates from performance</p>
-          <p className="mt-1 text-xs text-amber-200/90">
-            Learning candidates are not trusted playbook rules until reviewed and approved in Campaign Learnings.
-          </p>
+          <p className="mt-1 text-xs text-slate-400">Drafts sourced from snapshots and dry-runs — keep separate from approved playbook learnings.</p>
           <ul className="mt-3 space-y-2 text-sm text-slate-300">
             {(perfLearnings ?? []).map((l: Record<string, unknown>) => (
               <li className="rounded border border-slate-800/80 p-2" key={nzStr(l.recordId)}>
@@ -935,50 +998,72 @@ export function PerformanceIntelligenceSection() {
               </li>
             ))}
           </ul>
-          <div className="mt-4 grid gap-2">
-            <p className="text-xs font-bold uppercase text-slate-500">Create candidate</p>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <p className="text-xs font-bold uppercase text-slate-500 sm:col-span-2">Create learning candidate</p>
+            <p className="text-xs leading-relaxed text-slate-500 sm:col-span-2">
+              Learning candidates are not trusted until reviewed and approved in Campaign Learnings.
+            </p>
             <input className={inputClass} onChange={(e) => setLearningForm((s) => ({ ...s, title: e.target.value }))} placeholder="Title" value={learningForm.title} />
             <textarea
-              className={cn(inputClass, "min-h-[4rem]")}
+              className={cn(inputClass, "min-h-[3.5rem] sm:col-span-2")}
               onChange={(e) => setLearningForm((s) => ({ ...s, summary: e.target.value }))}
               placeholder="Summary"
               value={learningForm.summary}
             />
             <textarea
-              className={cn(inputClass, "min-h-[4rem]")}
+              className={cn(inputClass, "min-h-[3.5rem] sm:col-span-2")}
               onChange={(e) => setLearningForm((s) => ({ ...s, evidence: e.target.value }))}
               placeholder="Evidence"
               value={learningForm.evidence}
             />
             <textarea
-              className={cn(inputClass, "min-h-[4rem]")}
+              className={cn(inputClass, "min-h-[3.5rem] sm:col-span-2")}
               onChange={(e) => setLearningForm((s) => ({ ...s, recommendation: e.target.value }))}
               placeholder="Recommendation"
               value={learningForm.recommendation}
             />
-            <input className={inputClass} onChange={(e) => setLearningForm((s) => ({ ...s, confidence: e.target.value }))} placeholder="0–1 confidence" value={learningForm.confidence} />
-            <button className={btnSecondary} onClick={() => void submitLearning()} type="button">
-              Save as Campaign Learning Candidate
-            </button>
-            <Link className="text-sm text-sky-300 underline-offset-2 hover:underline" href="/libraries/campaign-learnings">
-              Open Campaign Learnings
-            </Link>
+            <input className={inputClass} onChange={(e) => setLearningForm((s) => ({ ...s, confidence: e.target.value }))} placeholder="Confidence (0–1)" value={learningForm.confidence} />
+            <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+              <button className={btnSecondary} onClick={() => void submitLearning()} type="button">
+                Save as Campaign Learning Candidate
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 sm:col-span-2">
+              When ready, open Libraries → Campaign Learnings from the main navigation to review and promote candidates.
+            </p>
           </div>
         </ControlPanel>
 
         <ControlPanel className="p-4">
           <p className="text-sm font-semibold text-slate-100">Copy Intelligence relationship</p>
           <p className="mt-2 text-sm leading-relaxed text-slate-300">
-            Approved learnings can inform future hooks, CTAs, topics, and platform tone in Copy Intelligence. Candidates stay optional context until a human
-            promotes them in the Library.
+            Approved performance learnings can inform future hooks, CTAs, topics, and platform tone in Copy Intelligence. Candidates stay optional until promoted
+            in Campaign Learnings.
           </p>
-          <p className="mt-3 text-sm font-semibold text-slate-100">Trend & Production links</p>
+          <p className="mt-3 text-sm font-semibold text-slate-100">Evidence links</p>
           <p className="mt-2 text-sm text-slate-400">
             Snapshots can reference <code className="text-slate-300">trendId</code> and <code className="text-slate-300">productionAssetId</code> for evidence
             trails. Trend performance rollups remain minimal in v1.
           </p>
         </ControlPanel>
       </div>
+
+      <details className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950/50">
+        <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-slate-200 marker:content-none hover:bg-slate-900/60 [&::-webkit-details-marker]:hidden">
+          Planned read-only integrations <span className="font-normal text-slate-500">(expand)</span>
+        </summary>
+        <div className="border-t border-slate-800 px-4 py-3">
+          <p className="text-xs text-slate-500">Not connected in this build.</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {FUTURE_INTEGRATIONS.map((row) => (
+              <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2" key={row.name}>
+                <p className="text-sm text-slate-200">{row.name}</p>
+                <p className="mt-1 text-xs text-slate-500">{row.mode}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </details>
 
       {editorOpen ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
@@ -1006,7 +1091,7 @@ export function PerformanceIntelligenceSection() {
                 <select className={inputClass} onChange={(e) => setForm((f) => ({ ...f, platform: e.target.value }))} value={form.platform ?? ""}>
                   {PLATFORMS.map((p) => (
                     <option key={p} value={p}>
-                      {p}
+                      {humanizePerformancePlatform(p)}
                     </option>
                   ))}
                 </select>
@@ -1016,7 +1101,7 @@ export function PerformanceIntelligenceSection() {
                 <select className={inputClass} onChange={(e) => setForm((f) => ({ ...f, contentType: e.target.value }))} value={form.contentType ?? ""}>
                   {CONTENT_TYPES.map((p) => (
                     <option key={p} value={p}>
-                      {p}
+                      {titleCaseSnake(p)}
                     </option>
                   ))}
                 </select>
@@ -1038,7 +1123,7 @@ export function PerformanceIntelligenceSection() {
                 <select className={inputClass} onChange={(e) => setForm((f) => ({ ...f, sourceSystem: e.target.value }))} value={form.sourceSystem ?? ""}>
                   {SOURCE_SYSTEMS.map((p) => (
                     <option key={p} value={p}>
-                      {p}
+                      {humanizeSourceOrModeLabel(p)}
                     </option>
                   ))}
                 </select>
@@ -1048,7 +1133,7 @@ export function PerformanceIntelligenceSection() {
                 <select className={inputClass} onChange={(e) => setForm((f) => ({ ...f, sourceMode: e.target.value }))} value={form.sourceMode ?? ""}>
                   {SOURCE_MODES.map((p) => (
                     <option key={p} value={p}>
-                      {p}
+                      {humanizeSourceOrModeLabel(p)}
                     </option>
                   ))}
                 </select>
@@ -1058,7 +1143,7 @@ export function PerformanceIntelligenceSection() {
                 <select className={inputClass} onChange={(e) => setForm((f) => ({ ...f, metricStatus: e.target.value }))} value={form.metricStatus ?? ""}>
                   {METRIC_STATUSES.map((p) => (
                     <option key={p} value={p}>
-                      {p}
+                      {humanizeMetricStatusLabel(p)}
                     </option>
                   ))}
                 </select>

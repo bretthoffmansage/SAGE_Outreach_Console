@@ -81,12 +81,12 @@ function isExtendedSourceTablePage(key: LibraryPageKey): boolean {
 
 const libraryPageConfig: Record<LibraryPageKey, { title: string; summary: string; tone: string; filters: string[]; columns: string[] }> = {
   offers: {
-    title: "Offers & Lead Magnets",
+    title: "Offer / CTA Library",
     summary:
-      "Reusable offers, CTAs, event invitations, lead magnets, and launch conversion assets operators approve and reuse across campaigns.",
+      "Reusable offers, CTAs, event invitations, lead magnets, and conversion assets that operators approve and reuse across launch campaigns.",
     tone: "blue",
-    filters: ["All", "Active", "Approved", "Needs Blue Approval", "Possible Idea", "Paused", "Retired"],
-    columns: ["Name", "Type", "Status", "Approval owner", "Allowed channels", "Allowed audiences", "Last used", "Performance", "Action"],
+    filters: ["All", "Active", "Approved", "Needs Review", "Candidate", "Paused", "Retired"],
+    columns: ["Name", "Type", "Status", "Review owner", "Allowed channels", "Allowed audiences", "Last used", "Performance", "Action"],
   },
   email: {
     title: "Email Library",
@@ -97,25 +97,25 @@ const libraryPageConfig: Record<LibraryPageKey, { title: string; summary: string
     columns: ["Title / Subject", "Rating", "Source Type", "Associated Campaign", "Last Used", "Open"],
   },
   "voice-rules": {
-    title: "Bari Voice Rules",
+    title: "Founder Voice / Bari Rules",
     summary:
-      "Founder-voice and brand-sensitive copy guidance used to help draft copy that sounds like Bari when that tone is needed — blocking, warning, and guidance rules operators apply.",
+      "Founder-voice and brand-sensitive guidance for copy that needs Bari-style tone, approved sign-offs, or extra brand judgment. Most routine launch copy can stay internal unless founder voice is needed.",
     tone: "amber",
     filters: ["All", "Blocking", "Warning", "Guidance"],
     columns: ["Rule", "Severity", "Status", "Summary"],
   },
   signoffs: {
-    title: "Sign-off Library",
+    title: "Sign-offs",
     summary:
-      "Approved sign-offs and closing styles that can be selected based on context and voice, with usage rules your team enforces.",
+      "Approved sign-offs and closing lines operators can choose based on context, voice, and review requirements. Auto-selection remains disabled unless a record is approved for trusted Copy Intelligence use.",
     tone: "green",
-    filters: ["All", "Active", "Inactive", "Requires Bari Review", "Auto-selectable"],
-    columns: ["Sign-off Text", "Allowed Contexts", "Status", "Agent Auto Choose", "Requires Bari Review", "Example Usage"],
+    filters: ["All", "Active", "Inactive", "Founder Voice Review", "Trusted for AI Context"],
+    columns: ["Sign-off", "Allowed Contexts", "Status", "Trusted for AI context", "Founder voice review", "Example Usage"],
   },
   audiences: {
-    title: "Audience Library",
+    title: "Audience Intelligence",
     summary:
-      "Audience intelligence for launch targeting: pain points, objections, motivations, exclusions, and segment notes that inform weekly launch packets.",
+      "Audience segments, source mappings, exclusions, objections, and messaging notes that inform weekly launch packets.",
     tone: "blue",
     filters: ["All", "Active", "Demo", "Manual", "Needs Review"],
     columns: ["Audience", "Source", "Status", "Estimated Size", "Allowed Offers", "Exclusions", "Last Used", "Performance"],
@@ -123,15 +123,15 @@ const libraryPageConfig: Record<LibraryPageKey, { title: string; summary: string
   compliance: {
     title: "Compliance Rules",
     summary:
-      "Claims, risk, promise, urgency, and public-facing language guardrails — blocking, warning, and guidance your team applies before launch.",
+      "Claims, urgency, risk, and public-facing language guardrails for launch copy, offers, ads, emails, and social posts.",
     tone: "red",
     filters: ["All", "Blocking", "Warning", "Guidance", "Inactive"],
     columns: ["Rule", "Severity", "Claim Type", "Status", "Channels", "Owner", "Examples"],
   },
   learning: {
-    title: "Learning Library",
+    title: "Campaign Learnings",
     summary:
-      "Approved reusable learnings from human edits, performance outcomes, and campaign reviews — curated signals operators maintain; full auto-learning remains manual until explicitly wired.",
+      "Human-reviewed learning candidates from edits, campaign performance, replies, and launch reviews. Candidates stay review-gated until approved.",
     tone: "purple",
     filters: ["All", "Candidate", "Approved", "Rejected", "Archived"],
     columns: ["Insight", "Source", "Confidence", "Status", "Applies To", "Last Used"],
@@ -155,7 +155,7 @@ const libraryPageConfig: Record<LibraryPageKey, { title: string; summary: string
   "voice-style": {
     title: "Voice & Style",
     summary:
-      "Founder voice, Sage tone, approved phrases, sign-offs, and writing rules — trusted context for Copy Intelligence alongside dedicated Bari Voice Rules and Sign-off Library routes.",
+      "Founder voice, Sage tone, approved phrases, sign-offs, and writing rules — trusted context for Copy Intelligence alongside Founder Voice / Bari Rules and Sign-offs routes.",
     tone: "amber",
     filters: ["All", "Draft", "Active", "Approved", "Needs Review", "Archived"],
     columns: ["Title", "Bucket", "Type", "Status", "Source", "Tags", "Updated"],
@@ -171,9 +171,9 @@ const libraryPageConfig: Record<LibraryPageKey, { title: string; summary: string
   "cta-library": {
     title: "Offer / CTA Library",
     summary:
-      "Reusable offers, lead magnets, calls to action, urgency notes, and next-step language — complements Offers & Lead Magnets with the same records surfaced for CTA-focused workflows.",
+      "Reusable offers, CTAs, event invitations, lead magnets, and conversion assets that operators approve and reuse across launch campaigns.",
     tone: "blue",
-    filters: ["All", "Active", "Approved", "Needs Blue Approval", "Possible Idea", "Paused", "Retired", "Draft"],
+    filters: ["All", "Active", "Approved", "Needs Review", "Candidate", "Paused", "Retired", "Draft"],
     columns: ["Title", "Bucket", "Type", "Status", "Source", "Tags", "Updated"],
   },
   "platform-playbooks": {
@@ -204,6 +204,56 @@ const libraryPageConfig: Record<LibraryPageKey, { title: string; summary: string
 
 function formatLabel(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+/** Human-facing status for offer / CTA rows (Convex may still store legacy status strings). */
+function offerLeadDisplayStatus(status: string): string {
+  if (status === "needs_blue_approval" || status === "needs_review") return "Needs Review";
+  if (status === "possible_idea") return "Candidate";
+  return formatLabel(status);
+}
+
+function libraryPageUsesCardGrid(key: LibraryPageKey): boolean {
+  return (
+    key === "offers"
+    || key === "cta-library"
+    || key === "voice-rules"
+    || key === "signoffs"
+    || key === "audiences"
+    || key === "compliance"
+    || key === "learning"
+    || key === "campaign-learnings"
+  );
+}
+
+function LibraryInventoryContextCard() {
+  return (
+    <ControlPanel className="p-3 sm:p-4">
+      <p className="text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Library context</p>
+      <p className="mt-1.5 text-sm leading-6 text-slate-300">
+        Approved and active records can support Copy Intelligence and campaign builders. Candidates, drafts, and inactive records stay review-gated. Drive indexing and Obsidian export remain preview/planned until connected.
+      </p>
+    </ControlPanel>
+  );
+}
+
+function humanizeOfferFitField(raw: string): string {
+  const t = raw.trim();
+  if (!t || t === "—" || t.toUpperCase() === "TBD") return "Not defined yet";
+  return t;
+}
+
+function humanizePerformanceNotesField(raw: string): string {
+  const t = raw.trim().toLowerCase();
+  if (!t || t === "—" || t === "unknown") return "No performance notes yet";
+  return raw.trim();
+}
+
+function audienceSourceDisplay(item: LibraryItem): string {
+  const st = readPayloadString(item, "sourceType", "");
+  const sl = readPayloadString(item, "sourceLabel", "");
+  if (st.toLowerCase() === "keap tag") return sl || "CRM tag";
+  return st || sl || "—";
 }
 
 function toneForStatus(status: string) {
@@ -298,6 +348,10 @@ function readLearningString(insight: LearningInsight, key: string, fallback: str
 function readLearningBoolean(insight: LearningInsight, key: string, fallback: boolean) {
   const value = learningPayload(insight)[key];
   return typeof value === "boolean" ? value : fallback;
+}
+
+function formatLearningNotesDisplay(raw: string): string {
+  return raw.replace(/\bauto-suggesting\b/gi, "using as trusted guidance");
 }
 
 function toLibraryItem(record: {
@@ -472,7 +526,7 @@ function rowsFor(key: LibraryPageKey, libraryItems: LibraryItem[], learningInsig
           displayTitleForItem(item),
           item.bucket ? formatLabel(item.bucket) : "—",
           formatLabel(item.type),
-          formatLabel(item.status),
+          key === "cta-library" ? offerLeadDisplayStatus(item.status) : formatLabel(item.status),
           item.sourceSystem ?? readPayloadString(item, "sourceLabel", "manual"),
           item.tags.join(", ") || "—",
           formatLibraryUpdated(item),
@@ -493,8 +547,7 @@ function rowsFor(key: LibraryPageKey, libraryItems: LibraryItem[], learningInsig
       cells: [
         item.name,
         item.type.replace(/_/g, " "),
-        formatLabel(item.status),
-        readPayloadString(item, "approvalOwner", item.status === "needs_blue_approval" ? "Blue" : "Operator"),
+        offerLeadDisplayStatus(item.status),
         readPayloadString(item, "allowedChannels", "email, landing page"),
         readPayloadString(item, "allowedAudiences", "General marketing"),
         readPayloadString(item, "lastUsed", "Apr 30"),
@@ -567,13 +620,13 @@ function rowsFor(key: LibraryPageKey, libraryItems: LibraryItem[], learningInsig
       kind: "library",
       cells: [
         item.name,
-        readPayloadString(item, "sourceLabel", "Keap tag"),
+        audienceSourceDisplay(item),
         formatLabel(item.status),
         readPayloadString(item, "estimatedSize", "—"),
-        readPayloadString(item, "allowedOffers", "—"),
+        humanizeOfferFitField(readPayloadString(item, "allowedOffers", "—")),
         readPayloadString(item, "exclusions", "—"),
         readPayloadString(item, "lastUsed", "Apr 30"),
-        readPayloadString(item, "performanceNotes", "—"),
+        humanizePerformanceNotesField(readPayloadString(item, "performanceNotes", "—")),
       ],
     }));
   }
@@ -602,7 +655,8 @@ function rowMatchesFilter(key: LibraryPageKey, record: InventoryRecord, activeFi
   const normalized = activeFilter.toLowerCase();
 
   if (key === "offers") {
-    if (normalized === "needs blue approval") return record.status === "needs_blue_approval";
+    if (normalized === "needs review") return record.status === "needs_blue_approval" || record.status === "needs_review";
+    if (normalized === "candidate") return record.status === "possible_idea" || record.status === "candidate";
     if (normalized === "approved") return record.status === "active";
     return formatLabel(record.status).toLowerCase() === normalized;
   }
@@ -620,8 +674,14 @@ function rowMatchesFilter(key: LibraryPageKey, record: InventoryRecord, activeFi
   if (key === "signoffs") {
     if (normalized === "active") return record.status === "active";
     if (normalized === "inactive") return record.status === "inactive";
-    if (normalized === "requires bari review") return record.cells[4].toLowerCase() === "yes";
-    if (normalized === "auto-selectable") return record.cells[3].toLowerCase() === "yes";
+    const item = record.kind === "library" ? record.source as LibraryItem : undefined;
+    if (!item) return false;
+    if (normalized === "founder voice review" || normalized === "requires bari review") {
+      return readPayloadBoolean(item, "requiresBariReview", false);
+    }
+    if (normalized === "trusted for ai context" || normalized === "auto-selectable") {
+      return readPayloadBoolean(item, "agentAutoChoose", false);
+    }
     return true;
   }
 
@@ -643,7 +703,8 @@ function rowMatchesFilter(key: LibraryPageKey, record: InventoryRecord, activeFi
   }
 
   if (key === "cta-library") {
-    if (normalized === "needs blue approval") return record.status === "needs_blue_approval";
+    if (normalized === "needs review") return record.status === "needs_blue_approval" || record.status === "needs_review";
+    if (normalized === "candidate") return record.status === "possible_idea" || record.status === "candidate";
     if (normalized === "approved") return record.status === "active";
     return formatLabel(record.status).toLowerCase() === normalized;
   }
@@ -700,7 +761,7 @@ function advancedFilterDefinitionsFor(key: LibraryPageKey): AdvancedFilterDefini
       },
       {
         key: "approvalOwner",
-        label: "Approval Owner",
+        label: "Review owner",
         getValue: (record) => record.kind === "library" ? readPayloadString(record.source as LibraryItem, "approvalOwner", "Operator") : "",
       },
     ];
@@ -728,8 +789,13 @@ function advancedFilterDefinitionsFor(key: LibraryPageKey): AdvancedFilterDefini
       },
       {
         key: "autoChoose",
-        label: "Agent Auto Choose",
+        label: "Trusted for AI context",
         getValue: (record) => record.kind === "library" ? (readPayloadBoolean(record.source as LibraryItem, "agentAutoChoose", false) ? "Yes" : "No") : "",
+      },
+      {
+        key: "bariReview",
+        label: "Founder voice review",
+        getValue: (record) => record.kind === "library" ? (readPayloadBoolean(record.source as LibraryItem, "requiresBariReview", false) ? "Yes" : "No") : "",
       },
     ];
   }
@@ -738,7 +804,7 @@ function advancedFilterDefinitionsFor(key: LibraryPageKey): AdvancedFilterDefini
       {
         key: "source",
         label: "Source",
-        getValue: (record) => record.kind === "library" ? readPayloadString(record.source as LibraryItem, "sourceLabel", readPayloadString(record.source as LibraryItem, "sourceType", "Unknown")) : "",
+        getValue: (record) => record.kind === "library" ? audienceSourceDisplay(record.source as LibraryItem) : "",
       },
       {
         key: "performance",
@@ -807,10 +873,10 @@ function filterChipDotTone(key: LibraryPageKey, filter: string): "green" | "ambe
     if (key === "learning" || key === "campaign-learnings") return "purple";
     return "blue";
   }
-  if (key === "offers") {
+  if (key === "offers" || key === "cta-library") {
     if (filter === "Active" || filter === "Approved") return "green";
-    if (filter === "Needs Blue Approval") return "amber";
-    if (filter === "Possible Idea") return "blue";
+    if (filter === "Needs Review") return "amber";
+    if (filter === "Candidate") return "blue";
     return "gray";
   }
   if (key === "voice-rules") {
@@ -819,8 +885,8 @@ function filterChipDotTone(key: LibraryPageKey, filter: string): "green" | "ambe
     return "blue";
   }
   if (key === "signoffs") {
-    if (filter === "Active" || filter === "Auto-selectable") return "green";
-    if (filter === "Requires Bari Review") return "amber";
+    if (filter === "Active" || filter === "Trusted for AI Context") return "green";
+    if (filter === "Founder Voice Review" || filter === "Requires Bari Review") return "amber";
     return "gray";
   }
   if (key === "audiences") {
@@ -843,7 +909,7 @@ function filterChipDotTone(key: LibraryPageKey, filter: string): "green" | "ambe
   }
   if (isExtendedSourceTablePage(key)) {
     if (filter === "Approved" || filter === "Active") return "green";
-    if (filter === "Draft" || filter === "Candidate" || filter === "Needs Review" || filter === "Needs Blue Approval") return "amber";
+    if (filter === "Draft" || filter === "Candidate" || filter === "Needs Review") return "amber";
     if (filter === "Rejected") return "red";
     return "gray";
   }
@@ -1399,14 +1465,32 @@ function SelectedRecordPanel({
       <div>
         <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Selected record</p>
         <h3 className="mt-2 text-lg font-semibold text-slate-100">
-          {mode === "create" ? `Add ${libraryPageConfig[keyName].title.slice(0, -1) || "Record"}` : record?.title ?? "Select a record"}
+          {mode === "create"
+            ? (keyName === "offers" || keyName === "cta-library"
+                ? "Add Offer / CTA record"
+                : keyName === "voice-rules" || keyName === "voice-style"
+                  ? "Add voice rule"
+                  : keyName === "signoffs"
+                    ? "Add sign-off record"
+                    : keyName === "audiences" || keyName === "audience-intelligence"
+                      ? "Add audience record"
+                      : keyName === "compliance"
+                        ? "Add compliance rule"
+                        : keyName === "learning" || keyName === "campaign-learnings"
+                          ? "Add learning insight"
+                          : `Add ${libraryPageConfig[keyName].title}`)
+            : record?.title ?? "Select a record"}
         </h3>
       </div>
       <div className="flex flex-col items-end gap-2">
         {mode === "view" && record ? (
           keyName === "email"
             ? <SourceRatingBadge value={record.status} />
-            : <StatusBadge tone={toneForStatus(record.status)}>{formatLabel(record.status)}</StatusBadge>
+            : keyName === "voice-rules" || keyName === "voice-style"
+              ? <StatusBadge tone={toneForSeverityCell(readPayloadString(record.source as LibraryItem, "severityLabel", record.cells[1] ?? ""))}>{readPayloadString(record.source as LibraryItem, "severityLabel", record.cells[1] ?? formatLabel(record.status))}</StatusBadge>
+              : keyName === "offers" || keyName === "cta-library"
+                ? <StatusBadge tone={toneForStatus(record.status)}>{offerLeadDisplayStatus(record.status)}</StatusBadge>
+                : <StatusBadge tone={toneForStatus(record.status)}>{formatLabel(record.status)}</StatusBadge>
         ) : null}
         <EditorActions mode={mode} saving={saving} onEdit={onEdit} onSave={onSave} onCancel={onCancel} />
       </div>
@@ -1454,8 +1538,20 @@ function SelectedRecordPanel({
             <>
               <Field label="Name"><input className={inputStyles} value={stringFromDraft(draft.name)} onChange={(e) => onDraftChange("name", e.target.value)} /></Field>
               <Field label="Type"><select className={inputStyles} value={stringFromDraft(draft.type)} onChange={(e) => onDraftChange("type", e.target.value)}>{["offer", "lead_magnet", "cta"].map((option) => <option key={option} value={option}>{formatLabel(option)}</option>)}</select></Field>
-              <Field label="Status"><select className={inputStyles} value={stringFromDraft(draft.status)} onChange={(e) => onDraftChange("status", e.target.value)}>{["active", "needs_blue_approval", "possible_idea", "paused", "retired"].map((option) => <option key={option} value={option}>{formatLabel(option)}</option>)}</select></Field>
-              <Field label="Approval Owner"><input className={inputStyles} value={stringFromDraft(draft.approvalOwner)} onChange={(e) => onDraftChange("approvalOwner", e.target.value)} /></Field>
+              <Field label="Status">
+                <select className={inputStyles} value={stringFromDraft(draft.status)} onChange={(e) => onDraftChange("status", e.target.value)}>
+                  {[
+                    { value: "active", label: "Active" },
+                    { value: "needs_blue_approval", label: "Needs Review" },
+                    { value: "possible_idea", label: "Candidate" },
+                    { value: "paused", label: "Paused" },
+                    { value: "retired", label: "Retired" },
+                  ].map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Review owner"><input className={inputStyles} value={stringFromDraft(draft.approvalOwner)} onChange={(e) => onDraftChange("approvalOwner", e.target.value)} /></Field>
               <Field label="Allowed Channels"><input className={inputStyles} value={stringFromDraft(draft.allowedChannels)} onChange={(e) => onDraftChange("allowedChannels", e.target.value)} /></Field>
               <Field label="Allowed Audiences"><input className={inputStyles} value={stringFromDraft(draft.allowedAudiences)} onChange={(e) => onDraftChange("allowedAudiences", e.target.value)} /></Field>
               <Field label="Last Used"><input className={inputStyles} value={stringFromDraft(draft.lastUsed)} onChange={(e) => onDraftChange("lastUsed", e.target.value)} /></Field>
@@ -1480,8 +1576,8 @@ function SelectedRecordPanel({
               <Field label="Sign-off Text"><textarea className={textareaStyles} value={stringFromDraft(draft.signoffText)} onChange={(e) => onDraftChange("signoffText", e.target.value)} /></Field>
               <Field label="Allowed Contexts"><input className={inputStyles} value={stringFromDraft(draft.allowedContexts)} onChange={(e) => onDraftChange("allowedContexts", e.target.value)} /></Field>
               <Field label="Status"><select className={inputStyles} value={stringFromDraft(draft.status)} onChange={(e) => onDraftChange("status", e.target.value)}>{["active", "inactive"].map((option) => <option key={option} value={option}>{formatLabel(option)}</option>)}</select></Field>
-              <label className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/65 px-3 py-2.5 text-sm text-slate-200">Agent Auto Choose<input checked={boolFromDraft(draft.agentAutoChoose)} onChange={(e) => onDraftChange("agentAutoChoose", e.target.checked)} type="checkbox" /></label>
-              <label className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/65 px-3 py-2.5 text-sm text-slate-200">Requires Bari Review<input checked={boolFromDraft(draft.requiresBariReview)} onChange={(e) => onDraftChange("requiresBariReview", e.target.checked)} type="checkbox" /></label>
+              <label className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/65 px-3 py-2.5 text-sm text-slate-200">Trusted for AI context<input checked={boolFromDraft(draft.agentAutoChoose)} onChange={(e) => onDraftChange("agentAutoChoose", e.target.checked)} type="checkbox" /></label>
+              <label className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/65 px-3 py-2.5 text-sm text-slate-200">Founder voice review required<input checked={boolFromDraft(draft.requiresBariReview)} onChange={(e) => onDraftChange("requiresBariReview", e.target.checked)} type="checkbox" /></label>
               <Field label="Example Usage"><textarea className={textareaStyles} value={stringFromDraft(draft.exampleUsage)} onChange={(e) => onDraftChange("exampleUsage", e.target.value)} /></Field>
               <Field label="Usage Notes"><textarea className={textareaStyles} value={stringFromDraft(draft.usageNotes)} onChange={(e) => onDraftChange("usageNotes", e.target.value)} /></Field>
               <Field label="Last Touched"><input className={inputStyles} value={stringFromDraft(draft.lastTouched)} onChange={(e) => onDraftChange("lastTouched", e.target.value)} /></Field>
@@ -1567,12 +1663,15 @@ function SelectedRecordPanel({
   if (record.kind === "learning") {
     const insight = record.source as LearningInsight;
     const payload = learningPayload(insight);
+    const notesRaw = typeof payload.notes === "string" ? payload.notes : "";
     return (
       <ControlPanel className="p-4">
         {heading}
         {savedMessage ? <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">{savedMessage}</div> : null}
         {error ? <div className="mt-4 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">{error}</div> : null}
-        <div className="mt-4 grid gap-2 text-sm">
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Summary</p>
+        <div className="mt-2 grid gap-2 text-sm">
           <DetailRow label="Insight" value={insight.title} />
           <DetailRow label="Source" value={formatLabel(insight.source)} />
           <DetailRow label="Confidence" value={`${Math.round(insight.confidence * 100)}%`} />
@@ -1581,12 +1680,21 @@ function SelectedRecordPanel({
           {insight.approvedBy ? <DetailRow label="Approved by" value={insight.approvedBy} /> : null}
           {typeof insight.rejectedAt === "number" ? <DetailRow label="Rejected at" value={new Date(insight.rejectedAt).toLocaleString()} /> : null}
           {typeof insight.archivedAt === "number" ? <DetailRow label="Archived at" value={new Date(insight.archivedAt).toLocaleString()} /> : null}
+        </div>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Application</p>
+        <div className="mt-2 grid gap-2 text-sm">
           <DetailRow label="Applies to" value={readLearningString(insight, "appliesTo", "founder nurture, reply handling")} />
-          <DetailRow label="Can agents use" value={readLearningBoolean(insight, "canAgentsUse", false) ? "Yes" : "No"} />
-          <DetailRow label="Requires review" value={readLearningBoolean(insight, "requiresReview", true) ? "Yes" : "No"} />
+          <DetailRow label="Recommendation" value={insight.summary} />
           <DetailRow label="Evidence / examples" value={readLearningString(insight, "evidence", insight.summary)} />
           <DetailRow label="Last used" value={readLearningString(insight, "lastUsed", "Apr 30")} />
-          {typeof payload.notes === "string" ? <DetailRow label="Notes" value={payload.notes} /> : null}
+        </div>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Trust / review</p>
+        <div className="mt-2 grid gap-2 text-sm">
+          <DetailRow label="Trusted for AI context" value={readLearningBoolean(insight, "canAgentsUse", false) ? "Yes" : "No"} />
+          <DetailRow label="Requires review" value={readLearningBoolean(insight, "requiresReview", true) ? "Yes" : "No"} />
+          {notesRaw ? <DetailRow label="Notes" value={formatLearningNotesDisplay(notesRaw)} /> : null}
         </div>
       </ControlPanel>
     );
@@ -1643,25 +1751,46 @@ function SelectedRecordPanel({
   }
 
   if (keyName === "offers" || keyName === "cta-library") {
+    const trusted = readPayloadBoolean(item, "canAgentsUseAutomatically", item.status === "active");
+    const strategyReview = readPayloadBoolean(item, "requiresBlueApproval", item.status === "needs_blue_approval");
+    const reviewOwner = readPayloadString(item, "approvalOwner", item.status === "needs_blue_approval" ? "Blue" : "Operator");
     return (
       <ControlPanel className="p-4">
         {heading}
-        <div className="mt-4 grid gap-2 text-sm">
-          <DetailRow label="Offer / lead magnet" value={item.name} />
+        <p className="mt-3 text-xs leading-5 text-slate-500">
+          Approved and active records can be used as trusted Copy Intelligence context. Drafts, candidates, and inspiration-only examples stay review-gated.
+        </p>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Summary</p>
+        <div className="mt-2 grid gap-2 text-sm">
+          <DetailRow label="Name" value={item.name} />
           <DetailRow label="Type" value={item.type.replace(/_/g, " ")} />
-          <DetailRow label="Status" value={formatLabel(item.status)} />
-          <DetailRow label="Approval owner" value={readPayloadString(item, "approvalOwner", item.status === "needs_blue_approval" ? "Blue" : "Operator")} />
-          <DetailRow label="Can agents use automatically" value={readPayloadBoolean(item, "canAgentsUseAutomatically", item.status === "active") ? "Yes" : "No"} />
-          <DetailRow label="Requires Blue approval" value={readPayloadBoolean(item, "requiresBlueApproval", item.status === "needs_blue_approval") ? "Yes" : "No"} />
+          <DetailRow label="Status" value={offerLeadDisplayStatus(item.status)} />
+          <DetailRow label="Trusted for AI context" value={trusted ? "Yes" : "No"} />
+          <p className="text-xs text-slate-500">Only approved/active records should be used as trusted Copy Intelligence context.</p>
+          <DetailRow label="Review owner" value={reviewOwner} />
+        </div>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Usage</p>
+        <div className="mt-2 grid gap-2 text-sm">
           <DetailRow label="Allowed channels" value={readPayloadString(item, "allowedChannels", "email")} />
           <DetailRow label="Allowed audiences" value={readPayloadString(item, "allowedAudiences", "General")} />
           <DetailRow label="Disallowed audiences / exclusions" value={readPayloadString(item, "disallowedAudiences", "Current clients")} />
-          <DetailRow label="Approved claims" value={readPayloadString(item, "approvedClaims", "Approved library claims only")} />
-          <DetailRow label="Banned claims" value={readPayloadString(item, "bannedClaims", "Guaranteed transformation")} />
-          <DetailRow label="Default CTA" value={readPayloadString(item, "defaultCta", "Book your next step")} />
-          <DetailRow label="Last used" value={readPayloadString(item, "lastUsed", "Apr 30")} />
-          <DetailRow label="Performance signal" value={readPayloadString(item, "performanceSignal", "stable")} />
+          <DetailRow label="Default CTA" value={readPayloadString(item, "defaultCta", "—")} />
+          <DetailRow label="Last used" value={readPayloadString(item, "lastUsed", "—")} />
+          <DetailRow label="Performance signal" value={readPayloadString(item, "performanceSignal", "—")} />
         </div>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Guardrails</p>
+        <div className="mt-2 grid gap-2 text-sm">
+          <DetailRow label="Approved claims" value={readPayloadString(item, "approvedClaims", "—")} />
+          <DetailRow label="Banned claims" value={readPayloadString(item, "bannedClaims", "—")} />
+          <DetailRow label="Strategy review required" value={strategyReview ? "Yes" : "No"} />
+          <DetailRow label="Notes" value={readPayloadString(item, "usageNotes", "—")} />
+        </div>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Actions</p>
+        <p className="mt-2 text-xs text-slate-500">Use Edit to change fields. Obsidian preview and export actions stay under Sync status — planned/manual, not live vault or Drive writes.</p>
       </ControlPanel>
     );
   }
@@ -1671,17 +1800,33 @@ function SelectedRecordPanel({
     return (
       <ControlPanel className="p-4">
         {heading}
-        <div className="mt-4 grid gap-2 text-sm">
+        <p className="mt-3 text-xs leading-5 text-slate-500">
+          Founder-voice and brand-sensitive guidance for when Bari-style tone or extra brand judgment is needed — not the default review path for every launch line.
+        </p>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Rule</p>
+        <div className="mt-2 grid gap-2 text-sm">
           <DetailRow label="Rule name" value={item.name} />
           <DetailRow label="Severity" value={readPayloadString(item, "severityLabel", item.status === "blocking" ? "Blocking" : formatLabel(item.status))} />
+          <DetailRow label="Status" value={readPayloadString(item, "lifecycleStatus", "Active")} />
           <DetailRow label="Rule type / category" value={readPayloadString(item, "ruleCategory", "Terminology")} />
           <DetailRow label="Applies to" value={readPayloadStringArray(item, "appliesToSurfaces", ["email", "ads", "landing pages", "replies"]).join(", ")} />
+        </div>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Enforcement</p>
+        <div className="mt-2 grid gap-2 text-sm">
           <DetailRow label="Enforcement" value={readPayloadString(item, "enforcement", "Blocks final approval")} />
-          <DetailRow label="Agent behavior" value={readPayloadString(item, "agentBehavior", "Brand Rules Checker flags; Bari Voice Agent follows")} />
+          <DetailRow label="Copy Intelligence behavior" value={readPayloadString(item, "agentBehavior", "—")} />
           <DetailRow label="Example violation" value={readPayloadString(item, "exampleViolation", isSageRule ? "Sage" : "Generic corporate phrasing")} />
           <DetailRow label="Approved alternative" value={readPayloadString(item, "approvedAlternative", isSageRule ? "SAGE" : "Direct encouragement")} />
+        </div>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Usage</p>
+        <div className="mt-2 grid gap-2 text-sm">
           <DetailRow label="Last touched" value={readPayloadString(item, "lastTouched", "Apr 30")} />
-          <DetailRow label="Active status" value={readPayloadString(item, "lifecycleStatus", "Active")} />
+          <DetailRow label="Source examples" value={readPayloadString(item, "sourceExamples", "—")} />
+          <DetailRow label="Related sign-off or voice rule" value={readPayloadString(item, "relatedRule", "—")} />
+          <DetailRow label="Notes" value={readPayloadString(item, "usageNotes", "—")} />
         </div>
       </ControlPanel>
     );
@@ -1689,11 +1834,19 @@ function SelectedRecordPanel({
 
   if (keyName === "signoffs") {
     const variants = readPayloadStringArray(item, "approvedVariants", ["You can do this — Bari", "You can do this,\nBari"]);
+    const trusted = readPayloadBoolean(item, "agentAutoChoose", true);
+    const founderReview = readPayloadBoolean(item, "requiresBariReview", true);
     return (
       <ControlPanel className="p-4">
         {heading}
-        <div className="mt-4 grid gap-2 text-sm">
+        <p className="mt-3 text-xs leading-5 text-slate-500">
+          Sign-offs support voice and CTA endings for weekly launches. Trusted-for-context use stays approval-gated in Copy Intelligence.
+        </p>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Summary</p>
+        <div className="mt-2 grid gap-2 text-sm">
           <DetailRow label="Sign-off family / name" value={readPayloadString(item, "familyName", item.name)} />
+          <DetailRow label="Status" value={formatLabel(item.status)} />
           <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-300">
             <p className="font-semibold text-slate-200">Approved variants</p>
             <ul className="mt-2 list-disc space-y-1 pl-4">
@@ -1702,51 +1855,92 @@ function SelectedRecordPanel({
               ))}
             </ul>
           </div>
+        </div>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Usage</p>
+        <div className="mt-2 grid gap-2 text-sm">
           <DetailRow label="Allowed contexts" value={readPayloadString(item, "allowedContexts", "founder nurture")} />
           <DetailRow label="Avoid contexts" value={readPayloadString(item, "avoidContexts", "Hard sales closes")} />
-          <DetailRow label="Can agent choose automatically" value={readPayloadBoolean(item, "agentAutoChoose", true) ? "Yes" : "No"} />
-          <DetailRow label="Requires Bari review" value={readPayloadBoolean(item, "requiresBariReview", true) ? "Yes" : "No"} />
           <DetailRow label="Example usage" value={readPayloadString(item, "exampleUsage", item.summary)} />
-          <DetailRow label="Notes" value={readPayloadString(item, "notes", "Keep variants short and human.")} />
           <DetailRow label="Last touched" value={readPayloadString(item, "lastTouched", "Apr 30")} />
         </div>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Trust / review</p>
+        <div className="mt-2 grid gap-2 text-sm">
+          <DetailRow label="Trusted for AI context" value={trusted ? "Yes" : "No"} />
+          <DetailRow label="Founder voice review required" value={founderReview ? "Yes" : "No"} />
+          <DetailRow label="Notes" value={readPayloadString(item, "notes", "—")} />
+        </div>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Actions</p>
+        <p className="mt-2 text-xs text-slate-500">Use Edit to change fields. Sync stays preview/planned — expand Sync status for Obsidian actions.</p>
       </ControlPanel>
     );
   }
 
   if (keyName === "audiences" || keyName === "audience-intelligence") {
+    const srcSystem = readPayloadString(item, "sourceType", "");
+    const mapping = readPayloadString(item, "keapTag", "—");
     return (
       <ControlPanel className="p-4">
         {heading}
-        <div className="mt-4 grid gap-2 text-sm">
+        <p className="mt-3 text-xs leading-5 text-slate-500">
+          Map segments for weekly launch packets. When the upstream system is Keap CRM, details can name it explicitly; general labels stay audience-wide.
+        </p>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Summary</p>
+        <div className="mt-2 grid gap-2 text-sm">
           <DetailRow label="Audience name" value={item.name} />
-          <DetailRow label="Source type" value={readPayloadString(item, "sourceType", "Keap tag")} />
-          <DetailRow label="Keap tag mapping" value={readPayloadString(item, "keapTag", "TAG_REACTIVATION_DORMANT")} />
+          <DetailRow label="Source type" value={audienceSourceDisplay(item)} />
+          <DetailRow label="Source system" value={srcSystem.toLowerCase().includes("keap") ? "Keap CRM" : (srcSystem || "—")} />
           <DetailRow label="Estimated size" value={readPayloadString(item, "estimatedSize", "—")} />
           <DetailRow label="Status" value={formatLabel(item.status)} />
-          <DetailRow label="Exclusions" value={readPayloadString(item, "exclusions", "—")} />
-          <DetailRow label="Allowed offers" value={readPayloadString(item, "allowedOffers", "—")} />
-          <DetailRow label="Disallowed offers" value={readPayloadString(item, "disallowedOffers", "—")} />
-          <DetailRow label="Recommended use" value={readPayloadString(item, "recommendedUse", item.summary)} />
-          <DetailRow label="Risk notes" value={readPayloadString(item, "riskNotes", "Validate mapping before send.")} />
-          <DetailRow label="Last used" value={readPayloadString(item, "lastUsed", "Apr 30")} />
-          <DetailRow label="Performance notes" value={readPayloadString(item, "performanceNotes", "warming")} />
         </div>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Targeting</p>
+        <div className="mt-2 grid gap-2 text-sm">
+          <DetailRow label="Allowed offers" value={humanizeOfferFitField(readPayloadString(item, "allowedOffers", "—"))} />
+          <DetailRow label="Disallowed offers" value={humanizeOfferFitField(readPayloadString(item, "disallowedOffers", "—"))} />
+          <DetailRow label="Exclusions" value={readPayloadString(item, "exclusions", "—")} />
+          <DetailRow label="Recommended use" value={readPayloadString(item, "recommendedUse", item.summary)} />
+        </div>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Source / quality</p>
+        <div className="mt-2 grid gap-2 text-sm">
+          <DetailRow label="Audience/source mapping" value={mapping === "—" || !mapping.trim() ? "Not defined yet" : mapping} />
+          <DetailRow label="Risk notes" value={readPayloadString(item, "riskNotes", "—")} />
+          <DetailRow label="Performance notes" value={humanizePerformanceNotesField(readPayloadString(item, "performanceNotes", "—"))} />
+          <DetailRow label="Last used" value={readPayloadString(item, "lastUsed", "Apr 30")} />
+        </div>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Actions</p>
+        <p className="mt-2 text-xs text-slate-500">Use Edit to change fields. Drive and Obsidian remain preview/planned until connected.</p>
       </ControlPanel>
     );
   }
 
   if (keyName === "compliance") {
     const isNoGuarantee = item.id === "comp_no_guarantee";
+    const inactiveRule = item.status === "inactive" || readPayloadString(item, "lifecycleStatus", "").toLowerCase() === "inactive";
     return (
-      <ControlPanel className="p-4">
+      <ControlPanel className={cn("p-4", inactiveRule && "opacity-80")}>
         {heading}
-        <div className="mt-4 grid gap-2 text-sm">
+        {inactiveRule ? (
+          <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Historical reference — inactive / retired</p>
+        ) : null}
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Summary</p>
+        <div className="mt-2 grid gap-2 text-sm">
           <DetailRow label="Rule name" value={item.name} />
           <DetailRow label="Severity" value={readPayloadString(item, "severityLabel", "Blocking")} />
+          <DetailRow label="Status" value={readPayloadString(item, "lifecycleStatus", formatLabel(item.status))} />
           <DetailRow label="Claim type" value={readPayloadString(item, "claimType", "Claims")} />
           <DetailRow label="Applies to channels" value={readPayloadString(item, "channels", "email, landing page")} />
           <DetailRow label="Owner" value={readPayloadString(item, "owner", "Blue / Compliance")} />
+        </div>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Guardrail</p>
+        <div className="mt-2 grid gap-2 text-sm">
           <DetailRow
             label="Banned pattern / blocked claim"
             value={readPayloadString(item, "bannedPattern", isNoGuarantee ? "Promises of guaranteed results or personal transformation" : "Unsupported guarantee language")}
@@ -1756,10 +1950,17 @@ function SelectedRecordPanel({
             label="Approval consequence"
             value={readPayloadString(item, "approvalConsequence", isNoGuarantee ? "Blocks or escalates campaign for Blue review" : "Warning surfaced to Compliance Guard")}
           />
-          <DetailRow label="Agent enforcement" value={readPayloadString(item, "agentEnforcement", "Compliance Guard flags; Approval Router escalates")} />
+        </div>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Review behavior</p>
+        <div className="mt-2 grid gap-2 text-sm">
+          <DetailRow label="Copy Intelligence behavior" value={readPayloadString(item, "agentEnforcement", "—")} />
           <DetailRow label="Examples" value={readPayloadString(item, "examples", item.summary)} />
           <DetailRow label="Last touched" value={readPayloadString(item, "lastTouched", "Apr 30")} />
         </div>
+
+        <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-slate-500">Actions</p>
+        <p className="mt-2 text-xs text-slate-500">Use Edit to change fields. Sync stays preview/planned — expand Sync status for export tools.</p>
       </ControlPanel>
     );
   }
@@ -1966,7 +2167,17 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryPageKey }) {
   return (
     <div className="space-y-5">
       <SectionHeader
-        eyebrow="Content Library"
+        eyebrow={
+          key === "voice-rules"
+            ? "Voice & Style"
+            : key === "signoffs"
+              ? "Sign-offs"
+              : key === "audiences"
+                ? "Audience Intelligence"
+                : key === "learning" || key === "campaign-learnings"
+                  ? "Campaign Learnings"
+                  : "Content Library"
+        }
         title={config.title}
         description={config.summary}
         actions={
@@ -1998,29 +2209,7 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryPageKey }) {
         }
       />
 
-      <ControlPanel className="p-4">
-        <div className="flex flex-wrap items-start gap-3">
-          <BookOpen className="mt-0.5 h-5 w-5 shrink-0 text-sky-300" />
-          <div className="min-w-0 flex-1 space-y-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-100">Marketing knowledge store</p>
-              <p className="mt-2 text-sm leading-6 text-slate-300">
-                The Content Library is the reusable knowledge base for campaign creation. It holds approved copy, swipe examples, voice rules, offers, audience notes, compliance guidance, platform playbooks, and learnings that future AI agents and campaign builders can use — operators curate what is authoritative; nothing here auto-syncs or auto-retrieves until integrations are explicitly connected.
-              </p>
-            </div>
-            <p className="border-t border-slate-800 pt-3 text-xs leading-5 text-slate-500">
-              Future library sync (planned, not live): index content from Google Drive and export selected records as Obsidian-ready Markdown so this library can sit inside Sage&apos;s broader company knowledge graph. No Drive, Obsidian, or file indexing in this build.
-            </p>
-          </div>
-        </div>
-      </ControlPanel>
-
-      <ControlPanel className="p-4">
-        <p className="text-sm font-semibold text-slate-100">All buckets & sync</p>
-        <p className="mt-2 text-sm text-slate-300">
-          Open the <Link className="text-sky-300 underline hover:text-sky-200" href="/libraries">Content Library hub</Link> for Copy Archive, Swipe File, Voice &amp; Style, Audience Intelligence, Offers/CTAs, Platform Playbooks, Campaign Learnings, Source Imports, and Knowledge Sync — with record counts when Convex is connected.
-        </p>
-      </ControlPanel>
+      <LibraryInventoryContextCard />
 
       {loadError ? (
         <ControlPanel className="border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-100">{loadError}</ControlPanel>
@@ -2137,7 +2326,7 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryPageKey }) {
           <div className="flex items-start gap-3">
             <Sparkles className="mt-0.5 h-4 w-4 text-violet-300" />
             <p className="text-sm leading-6 text-slate-300">
-              Learning candidates from edits, campaign performance, replies, and tests stay reviewable before they graduate into approved, reusable guidance — human gatekeeping; no automatic promotion.
+              Learning candidates from edits, performance, replies, and campaign reviews stay reviewable before they become approved, reusable guidance. No automatic promotion.
             </p>
           </div>
         </ControlPanel>
@@ -2155,85 +2344,339 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryPageKey }) {
         </ControlPanel>
       ) : null}
 
-      <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-        <ConsoleTable>
-          <TableHead>
-            <tr>
-              {config.columns.map((column) => (
-                <Th key={column}>{column}</Th>
-              ))}
-            </tr>
-          </TableHead>
-          <tbody>
+      <section
+        className={cn(
+          "grid gap-4",
+          libraryPageUsesCardGrid(key) ? "lg:grid-cols-[minmax(0,1.68fr)_minmax(0,1fr)]" : "xl:grid-cols-[1.25fr_0.75fr]",
+        )}
+      >
+        {libraryPageUsesCardGrid(key) ? (
+          <div className="space-y-3">
             {(isLearningBucket ? convexLearningInsights === undefined : convexLibraryItems === undefined) ? (
-              <tr>
-                <td className="px-4 py-6 text-sm text-slate-300" colSpan={config.columns.length}>Loading library records…</td>
-              </tr>
+              <p className="rounded-lg border border-slate-800 bg-slate-950/70 px-4 py-3 text-sm text-slate-300">Loading library records…</p>
             ) : !filteredRows.length ? (
-              <tr>
-                <td className="px-4 py-6 text-sm text-slate-300" colSpan={config.columns.length}>
+              <ControlPanel className="p-4">
+                <p className="text-sm text-slate-300">
                   {hasSearchOrAdvancedFilters ? "No records match this search." : "No curated records in this bucket yet. Add approved source material so operators and future agents can reuse it."}
-                </td>
+                </p>
+              </ControlPanel>
+            ) : (
+              filteredRows.map((row) => {
+                const isSelected = row.id === resolvedSelectedId;
+                if (isLearningBucket) {
+                  const insight = row.source as LearningInsight;
+                  return (
+                    <button
+                      className={cn(
+                        "focus-ring w-full rounded-lg border p-4 text-left transition",
+                        isSelected ? "border-sky-500/50 bg-slate-900/90" : "border-slate-800 bg-slate-950/70 hover:border-slate-600 hover:bg-slate-900/80",
+                      )}
+                      key={row.id}
+                      onClick={() => {
+                        setSelectedId(row.id);
+                        setEditorMode("view");
+                        setSaveError(null);
+                        setSavedMessage(null);
+                      }}
+                      type="button"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-100">{insight.title}</p>
+                        <StatusBadge tone={toneForStatus(insight.status)}>{formatLabel(insight.status)}</StatusBadge>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">{formatLabel(insight.source)} · {Math.round(insight.confidence * 100)}% confidence</p>
+                      {insight.summary ? <p className="mt-2 line-clamp-2 text-sm text-slate-400">{insight.summary}</p> : null}
+                      <p className="mt-2 text-xs text-slate-500">
+                        <span className="font-semibold text-slate-400">Applies to </span>
+                        {readLearningString(insight, "appliesTo", "—")}
+                      </p>
+                      <p className="mt-2 text-xs text-slate-500">
+                        <span className="font-semibold text-slate-400">Evidence </span>
+                        <span className="line-clamp-2">{readLearningString(insight, "evidence", insight.summary)}</span>
+                      </p>
+                      <p className="mt-2 text-xs text-slate-500">
+                        <span className="font-semibold text-slate-400">Last used </span>
+                        {readLearningString(insight, "lastUsed", "—")}
+                      </p>
+                      <p className="mt-2 text-right text-xs font-semibold text-sky-300">Open</p>
+                    </button>
+                  );
+                }
+                const item = row.source as LibraryItem;
+                if (key === "offers" || key === "cta-library") {
+                  const trusted = readPayloadBoolean(item, "canAgentsUseAutomatically", item.status === "active");
+                  return (
+                    <button
+                      className={cn(
+                        "focus-ring w-full rounded-lg border p-4 text-left transition",
+                        isSelected ? "border-sky-500/50 bg-slate-900/90" : "border-slate-800 bg-slate-950/70 hover:border-slate-600 hover:bg-slate-900/80",
+                      )}
+                      key={row.id}
+                      onClick={() => {
+                        setSelectedId(row.id);
+                        setEditorMode("view");
+                        setSaveError(null);
+                        setSavedMessage(null);
+                      }}
+                      type="button"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-100">{row.title}</p>
+                        <StatusBadge tone={toneForStatus(row.status)}>{offerLeadDisplayStatus(row.status)}</StatusBadge>
+                      </div>
+                      <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-500">{formatLabel(item.type)}</p>
+                      {row.summary ? <p className="mt-2 line-clamp-2 text-sm text-slate-400">{row.summary}</p> : null}
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-[0.7rem] text-slate-500">
+                        <span className="font-semibold text-slate-400">Channels</span>
+                        <span>{readPayloadString(item, "allowedChannels", "—")}</span>
+                        <span className="text-slate-600">·</span>
+                        <span className="font-semibold text-slate-400">Audiences</span>
+                        <span>{readPayloadString(item, "allowedAudiences", "—")}</span>
+                        <span className="text-slate-600">·</span>
+                        <span className="font-semibold text-slate-400">Last used</span>
+                        <span>{readPayloadString(item, "lastUsed", "—")}</span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                        <span className={cn("text-xs font-semibold", trusted ? "text-emerald-300" : "text-amber-200")}>
+                          {trusted ? "Trusted for AI context" : "Not trusted until approved"}
+                        </span>
+                        <span className="text-xs font-semibold text-sky-300">Open</span>
+                      </div>
+                    </button>
+                  );
+                }
+                if (key === "signoffs") {
+                  const trusted = readPayloadBoolean(item, "agentAutoChoose", true);
+                  const founderReview = readPayloadBoolean(item, "requiresBariReview", true);
+                  return (
+                    <button
+                      className={cn(
+                        "focus-ring w-full rounded-lg border p-4 text-left transition",
+                        isSelected ? "border-sky-500/50 bg-slate-900/90" : "border-slate-800 bg-slate-950/70 hover:border-slate-600 hover:bg-slate-900/80",
+                      )}
+                      key={row.id}
+                      onClick={() => {
+                        setSelectedId(row.id);
+                        setEditorMode("view");
+                        setSaveError(null);
+                        setSavedMessage(null);
+                      }}
+                      type="button"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-100">{readPayloadString(item, "familyName", item.name)}</p>
+                        <StatusBadge tone={toneForStatus(item.status)}>{formatLabel(item.status)}</StatusBadge>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <StatusBadge tone={trusted ? "green" : "amber"}>{trusted ? "Trusted for AI context" : "Review-gated"}</StatusBadge>
+                        <StatusBadge tone={founderReview ? "amber" : "gray"}>{founderReview ? "Founder voice review" : "No founder review"}</StatusBadge>
+                      </div>
+                      <p className="mt-2 text-xs text-slate-500">
+                        <span className="font-semibold text-slate-400">Contexts </span>
+                        {readPayloadString(item, "allowedContexts", "—")}
+                      </p>
+                      {readPayloadString(item, "exampleUsage", row.summary) ? (
+                        <p className="mt-2 line-clamp-2 text-sm text-slate-400">{readPayloadString(item, "exampleUsage", row.summary)}</p>
+                      ) : null}
+                      <p className="mt-2 text-right text-xs font-semibold text-sky-300">Open</p>
+                    </button>
+                  );
+                }
+                if (key === "audiences") {
+                  return (
+                    <button
+                      className={cn(
+                        "focus-ring w-full rounded-lg border p-4 text-left transition",
+                        isSelected ? "border-sky-500/50 bg-slate-900/90" : "border-slate-800 bg-slate-950/70 hover:border-slate-600 hover:bg-slate-900/80",
+                      )}
+                      key={row.id}
+                      onClick={() => {
+                        setSelectedId(row.id);
+                        setEditorMode("view");
+                        setSaveError(null);
+                        setSavedMessage(null);
+                      }}
+                      type="button"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-100">{row.title}</p>
+                        <StatusBadge tone={toneForStatus(row.status)}>{formatLabel(row.status)}</StatusBadge>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">{audienceSourceDisplay(item)}</p>
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+                        <span className="font-semibold text-slate-400">Size</span>
+                        <span>{readPayloadString(item, "estimatedSize", "—")}</span>
+                        <span className="text-slate-600">·</span>
+                        <span className="font-semibold text-slate-400">Offers</span>
+                        <span className="line-clamp-1">{humanizeOfferFitField(readPayloadString(item, "allowedOffers", "—"))}</span>
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-sm text-slate-400">{readPayloadString(item, "recommendedUse", row.summary)}</p>
+                      <p className="mt-2 text-xs text-slate-500">
+                        <span className="font-semibold text-slate-400">Performance </span>
+                        {humanizePerformanceNotesField(readPayloadString(item, "performanceNotes", "—"))}
+                      </p>
+                      <p className="mt-2 text-right text-xs font-semibold text-sky-300">Open</p>
+                    </button>
+                  );
+                }
+                if (key === "compliance") {
+                  const inactiveRule = item.status === "inactive" || readPayloadString(item, "lifecycleStatus", "").toLowerCase() === "inactive";
+                  const sev = readPayloadString(item, "severityLabel", item.status === "blocking" ? "Blocking" : formatLabel(item.status));
+                  return (
+                    <button
+                      className={cn(
+                        "focus-ring w-full rounded-lg border p-4 text-left transition",
+                        isSelected ? "border-sky-500/50 bg-slate-900/90" : "border-slate-800 bg-slate-950/70 hover:border-slate-600 hover:bg-slate-900/80",
+                        inactiveRule && "opacity-70",
+                      )}
+                      key={row.id}
+                      onClick={() => {
+                        setSelectedId(row.id);
+                        setEditorMode("view");
+                        setSaveError(null);
+                        setSavedMessage(null);
+                      }}
+                      type="button"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-100">{row.title}</p>
+                        <StatusBadge tone={toneForSeverityCell(sev)}>{sev}</StatusBadge>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <StatusBadge tone="gray">{readPayloadString(item, "lifecycleStatus", formatLabel(item.status))}</StatusBadge>
+                        <StatusBadge tone="blue">{readPayloadString(item, "claimType", "—")}</StatusBadge>
+                      </div>
+                      <p className="mt-2 text-xs text-slate-500">{readPayloadString(item, "channels", "—")}</p>
+                      <p className="mt-2 text-xs text-slate-500">
+                        <span className="font-semibold text-slate-400">Owner </span>
+                        {readPayloadString(item, "owner", "—")}
+                      </p>
+                      {row.summary ? <p className="mt-2 line-clamp-2 text-sm text-slate-400">{row.summary}</p> : null}
+                      {inactiveRule ? <p className="mt-2 text-xs font-semibold text-slate-500">Retired / historical</p> : null}
+                      <p className="mt-2 text-right text-xs font-semibold text-sky-300">Open</p>
+                    </button>
+                  );
+                }
+                if (key === "voice-rules") {
+                  const sev = readPayloadString(item, "severityLabel", row.cells[1] ?? "");
+                  const lifecycle = readPayloadString(item, "lifecycleStatus", row.cells[2] ?? "Active");
+                  const enf = readPayloadString(item, "enforcement", "—");
+                  return (
+                    <button
+                      className={cn(
+                        "focus-ring w-full rounded-lg border p-4 text-left transition",
+                        isSelected ? "border-sky-500/50 bg-slate-900/90" : "border-slate-800 bg-slate-950/70 hover:border-slate-600 hover:bg-slate-900/80",
+                      )}
+                      key={row.id}
+                      onClick={() => {
+                        setSelectedId(row.id);
+                        setEditorMode("view");
+                        setSaveError(null);
+                        setSavedMessage(null);
+                      }}
+                      type="button"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-100">{row.title}</p>
+                        <StatusBadge tone={toneForSeverityCell(sev)}>{sev}</StatusBadge>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <StatusBadge tone="gray">{lifecycle}</StatusBadge>
+                        <StatusBadge tone="blue">{enf}</StatusBadge>
+                      </div>
+                      {row.summary ? <p className="mt-2 line-clamp-2 text-sm text-slate-400">{row.summary}</p> : null}
+                      <p className="mt-2 text-xs text-slate-500">
+                        <span className="font-semibold text-slate-400">Applies to </span>
+                        {readPayloadStringArray(item, "appliesToSurfaces", []).join(", ") || "—"}
+                      </p>
+                      <p className="mt-2 text-right text-xs font-semibold text-sky-300">Open</p>
+                    </button>
+                  );
+                }
+                return null;
+              })
+            )}
+          </div>
+        ) : (
+          <ConsoleTable>
+            <TableHead>
+              <tr>
+                {config.columns.map((column) => (
+                  <Th key={column}>{column}</Th>
+                ))}
               </tr>
-            ) : filteredRows.map((row) => {
-              const isSelected = row.id === resolvedSelectedId;
-              return (
-                <tr className={cn("cursor-pointer", isSelected ? "bg-slate-900/85" : "")} key={row.id} onClick={() => setSelectedId(row.id)}>
-                  {row.cells.map((cell, index) => {
-                    const column = config.columns[index] ?? "";
-                    const isStatusColumn = column === "Status";
-                    const isSeverityColumn = column === "Severity";
-                    const isRatingColumn = column === "Rating";
-                    const isActionColumn = column === "Action" || column === "Open";
-                    if (isStatusColumn) {
-                      return (
-                        <Td key={`${row.id}-${config.columns[index]}`}>
-                          <StatusBadge tone={toneForStatus(row.status)}>{cell}</StatusBadge>
-                        </Td>
-                      );
-                    }
-                    if (isSeverityColumn) {
-                      return (
-                        <Td key={`${row.id}-${column}`}>
-                          <StatusBadge tone={toneForSeverityCell(cell)}>{cell}</StatusBadge>
-                        </Td>
-                      );
-                    }
-                    if (isRatingColumn) {
-                      return (
-                        <Td key={`${row.id}-${column}`}>
-                          {key === "email" ? <SourceRatingBadge value={cell} /> : <StatusBadge tone={toneForRatingCell(cell)}>{cell}</StatusBadge>}
-                        </Td>
-                      );
-                    }
-                    if (isActionColumn) {
-                      return (
-                        <Td key={`${row.id}-action`}>
-                          <button
-                            className="focus-ring rounded"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setSelectedId(row.id);
-                              setEditorMode("view");
-                              setSaveError(null);
-                              setSavedMessage(null);
-                            }}
-                            type="button"
-                          >
-                            <InlineAction>{cell}</InlineAction>
-                          </button>
-                        </Td>
-                      );
-                    }
-                    return <Td key={`${row.id}-${index}`}>{cell}</Td>;
-                  })}
+            </TableHead>
+            <tbody>
+              {(isLearningBucket ? convexLearningInsights === undefined : convexLibraryItems === undefined) ? (
+                <tr>
+                  <td className="px-4 py-6 text-sm text-slate-300" colSpan={config.columns.length}>Loading library records…</td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </ConsoleTable>
+              ) : !filteredRows.length ? (
+                <tr>
+                  <td className="px-4 py-6 text-sm text-slate-300" colSpan={config.columns.length}>
+                    {hasSearchOrAdvancedFilters ? "No records match this search." : "No curated records in this bucket yet. Add approved source material so operators and future agents can reuse it."}
+                  </td>
+                </tr>
+              ) : filteredRows.map((row) => {
+                const isSelected = row.id === resolvedSelectedId;
+                return (
+                  <tr className={cn("cursor-pointer", isSelected ? "bg-slate-900/85" : "")} key={row.id} onClick={() => setSelectedId(row.id)}>
+                    {row.cells.map((cell, index) => {
+                      const column = config.columns[index] ?? "";
+                      const isStatusColumn = column === "Status";
+                      const isSeverityColumn = column === "Severity";
+                      const isRatingColumn = column === "Rating";
+                      const isActionColumn = column === "Action" || column === "Open";
+                      if (isStatusColumn) {
+                        return (
+                          <Td key={`${row.id}-${config.columns[index]}`}>
+                            <StatusBadge tone={toneForStatus(row.status)}>{cell}</StatusBadge>
+                          </Td>
+                        );
+                      }
+                      if (isSeverityColumn) {
+                        return (
+                          <Td key={`${row.id}-${column}`}>
+                            <StatusBadge tone={toneForSeverityCell(cell)}>{cell}</StatusBadge>
+                          </Td>
+                        );
+                      }
+                      if (isRatingColumn) {
+                        return (
+                          <Td key={`${row.id}-${column}`}>
+                            {key === "email" ? <SourceRatingBadge value={cell} /> : <StatusBadge tone={toneForRatingCell(cell)}>{cell}</StatusBadge>}
+                          </Td>
+                        );
+                      }
+                      if (isActionColumn) {
+                        return (
+                          <Td key={`${row.id}-action`}>
+                            <button
+                              className="focus-ring rounded"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setSelectedId(row.id);
+                                setEditorMode("view");
+                                setSaveError(null);
+                                setSavedMessage(null);
+                              }}
+                              type="button"
+                            >
+                              <InlineAction>{cell}</InlineAction>
+                            </button>
+                          </Td>
+                        );
+                      }
+                      return <Td key={`${row.id}-${index}`}>{cell}</Td>;
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </ConsoleTable>
+        )}
 
-        <div className="space-y-4">
+        <div className={cn("space-y-4", libraryPageUsesCardGrid(key) && "lg:sticky lg:top-4 self-start")}>
           <SelectedRecordPanel
             keyName={key}
             record={editorMode === "create" ? undefined : selectedRecord}
@@ -2256,7 +2699,7 @@ function LibraryInventoryPage({ libraryKey }: { libraryKey: LibraryPageKey }) {
             <ControlPanel className="p-4">
               <p className="text-sm font-semibold text-slate-100">Learning actions</p>
               <p className="mt-2 text-xs leading-5 text-slate-500">
-                Candidates are not trusted for automatic agent context until approved. Changes persist to Convex with reviewer attribution when available.
+                Approving an insight marks it as trusted reusable guidance. Rejected and archived learnings should not be used as trusted context. Candidates stay review-gated until a reviewer approves them.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
@@ -2302,13 +2745,16 @@ function LibrarySyncKnowledgePanel({ libraryRecordId, item }: { libraryRecordId:
   const markStale = useMutation(api.obsidianExport.markStale);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [syncDetailsOpen, setSyncDetailsOpen] = useState(false);
 
   const latest = exportRows?.[0] as { markdownBody?: string; obsidianPath?: string; exportId?: string; status?: string } | undefined;
   const markdownPreview = typeof latest?.markdownBody === "string" ? latest.markdownBody : "";
 
   const exportWarnings = useMemo(() => {
     const w: string[] = [];
-    if (["candidate", "draft", "needs_review"].includes(item.status)) w.push("This record is still in review — treat any Obsidian note as non-authoritative until approved.");
+    if (["candidate", "draft", "needs_review", "needs_blue_approval", "possible_idea"].includes(item.status)) {
+      w.push("This record is still in review — treat any Obsidian note as non-authoritative until approved.");
+    }
     if (item.usageRights === "inspiration_only" || item.bucket === "swipe_file") {
       w.push("Inspiration-only content — do not present as Sage-owned copy in the knowledge graph.");
     }
@@ -2329,115 +2775,160 @@ function LibrarySyncKnowledgePanel({ libraryRecordId, item }: { libraryRecordId:
     }
   };
 
+  const lastExportedLabel = item.obsidianLastExportedAt
+    ? new Date(item.obsidianLastExportedAt).toLocaleString()
+    : item.lastExportedAt
+      ? new Date(item.lastExportedAt).toLocaleString()
+      : "—";
+
   return (
     <ControlPanel className="p-4">
-      <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Sync &amp; Knowledge Graph</p>
-      <p className="mt-2 text-sm font-semibold text-slate-100">Google Drive, Obsidian, and Library Sync</p>
-      <p className="mt-2 text-xs leading-5 text-slate-500">
-        Preview-only Markdown for Obsidian — no vault or Drive writes from Outreach Console. Copy notes manually when satisfied.
-      </p>
-
-      <div className="mt-4 grid gap-2 text-sm">
-        <DetailRow label="Source system" value={item.sourceSystem ?? "—"} />
-        <DetailRow label="Source URI" value={item.sourceUri ?? "—"} />
-        <DetailRow label="Google Drive file ID" value={item.driveFileId ?? "—"} />
-        <DetailRow label="Google Drive path" value={item.drivePath ?? "—"} />
-        <DetailRow label="Drive sync status" value={getDriveSyncStatusLabel(item.driveSyncStatus)} />
-        <DetailRow label="Obsidian path" value={item.obsidianPath ?? "—"} />
-        <DetailRow label="Obsidian export status" value={getObsidianExportStatusLabel(item.obsidianSyncStatus)} />
-        <DetailRow label="Last indexed" value={item.lastIndexedAt ? new Date(item.lastIndexedAt).toLocaleString() : "—"} />
-        <DetailRow label="Last exported" value={item.obsidianLastExportedAt ? new Date(item.obsidianLastExportedAt).toLocaleString() : item.lastExportedAt ? new Date(item.lastExportedAt).toLocaleString() : "—"} />
-        <DetailRow label="Content hash" value={item.contentHash ?? "—"} />
-        <DetailRow label="General sync status" value={getGeneralSyncStatusLabel(item.syncStatus)} />
-        <DetailRow label="Sync notes" value={item.syncNotes ?? item.obsidianSyncNotes ?? item.driveSyncNotes ?? "—"} />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Sync status</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            Planned/manual only — Outreach Console does not write to Google Drive or Obsidian automatically. Copy Markdown manually when satisfied.
+          </p>
+        </div>
+        <button
+          className="focus-ring shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800"
+          onClick={() => setSyncDetailsOpen((o) => !o)}
+          type="button"
+        >
+          {syncDetailsOpen ? "Hide sync details" : "View sync details"}
+        </button>
       </div>
 
-      {exportWarnings.length ? (
-        <div className="mt-4 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-          <p className="font-semibold text-amber-50">Export readiness</p>
-          <ul className="mt-2 list-disc space-y-1 pl-4">
-            {exportWarnings.map((w) => (
-              <li key={w}>{w}</li>
-            ))}
-          </ul>
+      <div className="mt-3 grid gap-2 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-300">
+        <div className="flex flex-wrap justify-between gap-2">
+          <span className="font-semibold text-slate-200">Drive</span>
+          <span>{getDriveSyncStatusLabel(item.driveSyncStatus)}</span>
         </div>
+        <div className="flex flex-wrap justify-between gap-2">
+          <span className="font-semibold text-slate-200">Obsidian</span>
+          <span>{getObsidianExportStatusLabel(item.obsidianSyncStatus)}</span>
+        </div>
+        <div className="flex flex-wrap justify-between gap-2">
+          <span className="font-semibold text-slate-200">Export status</span>
+          <span>{getGeneralSyncStatusLabel(item.syncStatus)}</span>
+        </div>
+        <div className="flex flex-wrap justify-between gap-2">
+          <span className="font-semibold text-slate-200">Last exported</span>
+          <span>{lastExportedLabel}</span>
+        </div>
+      </div>
+
+      {syncDetailsOpen ? (
+        <>
+          <p className="mt-5 text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Sync &amp; Knowledge Graph</p>
+          <p className="mt-2 text-sm font-semibold text-slate-100">Google Drive, Obsidian, and Library Sync</p>
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            Preview-only Markdown for Obsidian — no vault or Drive writes from Outreach Console.
+          </p>
+
+          <div className="mt-4 grid gap-2 text-sm">
+            <DetailRow label="Source system" value={item.sourceSystem ?? "—"} />
+            <DetailRow label="Source URI" value={item.sourceUri ?? "—"} />
+            <DetailRow label="Google Drive file ID" value={item.driveFileId ?? "—"} />
+            <DetailRow label="Google Drive path" value={item.drivePath ?? "—"} />
+            <DetailRow label="Drive sync status" value={getDriveSyncStatusLabel(item.driveSyncStatus)} />
+            <DetailRow label="Obsidian path" value={item.obsidianPath ?? "—"} />
+            <DetailRow label="Obsidian export status" value={getObsidianExportStatusLabel(item.obsidianSyncStatus)} />
+            <DetailRow label="Last indexed" value={item.lastIndexedAt ? new Date(item.lastIndexedAt).toLocaleString() : "—"} />
+            <DetailRow label="Last exported" value={lastExportedLabel} />
+            <DetailRow label="Content hash" value={item.contentHash ?? "—"} />
+            <DetailRow label="General sync status" value={getGeneralSyncStatusLabel(item.syncStatus)} />
+            <DetailRow label="Sync notes" value={item.syncNotes ?? item.obsidianSyncNotes ?? item.driveSyncNotes ?? "—"} />
+          </div>
+
+          {exportWarnings.length ? (
+            <div className="mt-4 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+              <p className="font-semibold text-amber-50">Export readiness</p>
+              <ul className="mt-2 list-disc space-y-1 pl-4">
+                {exportWarnings.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {actionError ? <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">{actionError}</div> : null}
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              className="focus-ring rounded-lg border border-sky-500/50 bg-sky-500/15 px-3 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-500/25 disabled:opacity-40"
+              disabled={!!busy}
+              onClick={() =>
+                void run("preview", () =>
+                  generatePreview({ libraryRecordId, createdBy: appUser.displayName || appUser.email || "operator" }),
+                )
+              }
+              type="button"
+            >
+              {busy === "preview" ? "Generating…" : "Generate Obsidian Preview"}
+            </button>
+            <button
+              className="focus-ring rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+              disabled={!!busy || !markdownPreview}
+              onClick={() =>
+                void run("copy", async () => {
+                  await navigator.clipboard.writeText(markdownPreview);
+                })
+              }
+              type="button"
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <Copy className="h-3.5 w-3.5" />
+                Copy Markdown
+              </span>
+            </button>
+            <button
+              className="focus-ring rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-500/20 disabled:opacity-40"
+              disabled={!!busy}
+              onClick={() => void run("ready", () => markExportReady({ libraryRecordId, exportId: latest?.exportId }))}
+              type="button"
+            >
+              Mark Export Ready
+            </button>
+            <button
+              className="focus-ring rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-100 hover:bg-violet-500/20 disabled:opacity-40"
+              disabled={!!busy}
+              onClick={() => void run("exported", () => markExportedManually({ libraryRecordId, exportId: latest?.exportId }))}
+              type="button"
+            >
+              Mark Exported Manually
+            </button>
+            <button
+              className="focus-ring rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-400 hover:text-slate-200 disabled:opacity-40"
+              disabled={!!busy}
+              onClick={() => void run("ignored", () => markIgnored({ libraryRecordId }))}
+              type="button"
+            >
+              Ignore for Obsidian
+            </button>
+            <button
+              className="focus-ring rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-500/20 disabled:opacity-40"
+              disabled={!!busy}
+              onClick={() => void run("stale", () => markStale({ libraryRecordId }))}
+              type="button"
+            >
+              Mark Stale
+            </button>
+          </div>
+
+          {exportRows === undefined ? (
+            <p className="mt-4 text-xs text-slate-500">Loading export previews…</p>
+          ) : markdownPreview ? (
+            <div className="mt-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Latest preview</p>
+              {latest?.obsidianPath ? <p className="mt-1 text-xs text-slate-400">Path: {latest.obsidianPath}</p> : null}
+              <textarea readOnly className="mt-2 max-h-64 w-full resize-y rounded-lg border border-slate-800 bg-slate-950/80 p-3 font-mono text-[0.7rem] leading-relaxed text-slate-200" rows={14} value={markdownPreview} />
+            </div>
+          ) : (
+            <p className="mt-4 text-xs text-slate-500">No Markdown preview yet. Generate a preview to inspect Obsidian-ready output.</p>
+          )}
+        </>
       ) : null}
-
-      {actionError ? <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">{actionError}</div> : null}
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          className="focus-ring rounded-lg border border-sky-500/50 bg-sky-500/15 px-3 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-500/25 disabled:opacity-40"
-          disabled={!!busy}
-          onClick={() =>
-            void run("preview", () =>
-              generatePreview({ libraryRecordId, createdBy: appUser.displayName || appUser.email || "operator" }),
-            )
-          }
-          type="button"
-        >
-          {busy === "preview" ? "Generating…" : "Generate Obsidian Preview"}
-        </button>
-        <button
-          className="focus-ring rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-40"
-          disabled={!!busy || !markdownPreview}
-          onClick={() =>
-            void run("copy", async () => {
-              await navigator.clipboard.writeText(markdownPreview);
-            })
-          }
-          type="button"
-        >
-          <span className="inline-flex items-center gap-1.5">
-            <Copy className="h-3.5 w-3.5" />
-            Copy Markdown
-          </span>
-        </button>
-        <button
-          className="focus-ring rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-500/20 disabled:opacity-40"
-          disabled={!!busy}
-          onClick={() => void run("ready", () => markExportReady({ libraryRecordId, exportId: latest?.exportId }))}
-          type="button"
-        >
-          Mark Export Ready
-        </button>
-        <button
-          className="focus-ring rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-100 hover:bg-violet-500/20 disabled:opacity-40"
-          disabled={!!busy}
-          onClick={() => void run("exported", () => markExportedManually({ libraryRecordId, exportId: latest?.exportId }))}
-          type="button"
-        >
-          Mark Exported Manually
-        </button>
-        <button
-          className="focus-ring rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-400 hover:text-slate-200 disabled:opacity-40"
-          disabled={!!busy}
-          onClick={() => void run("ignored", () => markIgnored({ libraryRecordId }))}
-          type="button"
-        >
-          Ignore for Obsidian
-        </button>
-        <button
-          className="focus-ring rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-500/20 disabled:opacity-40"
-          disabled={!!busy}
-          onClick={() => void run("stale", () => markStale({ libraryRecordId }))}
-          type="button"
-        >
-          Mark Stale
-        </button>
-      </div>
-
-      {exportRows === undefined ? (
-        <p className="mt-4 text-xs text-slate-500">Loading export previews…</p>
-      ) : markdownPreview ? (
-        <div className="mt-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Latest preview</p>
-          {latest?.obsidianPath ? <p className="mt-1 text-xs text-slate-400">Path: {latest.obsidianPath}</p> : null}
-          <textarea readOnly className="mt-2 max-h-64 w-full resize-y rounded-lg border border-slate-800 bg-slate-950/80 p-3 font-mono text-[0.7rem] leading-relaxed text-slate-200" rows={14} value={markdownPreview} />
-        </div>
-      ) : (
-        <p className="mt-4 text-xs text-slate-500">No Markdown preview yet. Generate a preview to inspect Obsidian-ready output.</p>
-      )}
     </ControlPanel>
   );
 }
@@ -2446,17 +2937,17 @@ function isLibraryInventorySegment(segment: string): segment is LibraryPageKey {
   return Object.prototype.hasOwnProperty.call(libraryPageConfig, segment);
 }
 
-const HUB_PRIMARY_BUCKETS: { slug: LibraryRouteSlug; title: string; blurb: string; status: "Active" | "Planned" | "Sync-ready" }[] = [
-  { slug: "copy-archive", title: "Copy Archive", blurb: "Owned emails, YouTube, social, ads, landing pages, and launch copy.", status: "Active" },
-  { slug: "swipe-file", title: "Swipe File", blurb: "Outside hooks, formats, and examples — inspiration, not owned copy by default.", status: "Active" },
-  { slug: "voice-style", title: "Voice & Style", blurb: "Founder voice, tone rules, phrases to use or avoid — complements Voice Rules & Sign-offs.", status: "Active" },
-  { slug: "audience-intelligence", title: "Audience Intelligence", blurb: "Segments, pains, objections, and messaging notes for launches.", status: "Active" },
-  { slug: "cta-library", title: "Offer / CTA Library", blurb: "Reusable CTAs, offers, and lead magnets (also under Offers & Lead Magnets).", status: "Active" },
-  { slug: "platform-playbooks", title: "Platform Playbooks", blurb: "YouTube, email, reels, TikTok, Meta, Pinterest, X, ads — patterns and guardrails.", status: "Active" },
-  { slug: "compliance", title: "Compliance Rules", blurb: "Claims, urgency, and public-facing language guardrails.", status: "Active" },
-  { slug: "campaign-learnings", title: "Campaign Learnings", blurb: "Performance and review lessons — approve before trusted reuse.", status: "Active" },
-  { slug: "source-imports", title: "Source Imports", blurb: "Drive, Obsidian, transcripts, exports — metadata first.", status: "Planned" },
-  { slug: "knowledge-sync", title: "Knowledge Sync", blurb: "Prepare Google Drive indexing and Obsidian Markdown export — preview and metadata only until connectors ship.", status: "Planned" },
+const HUB_PRIMARY_BUCKETS: { slug: LibraryRouteSlug; title: string; blurb: string; badge: "Active" | "Planned" | "Preview-only" }[] = [
+  { slug: "copy-archive", title: "Copy Archive", blurb: "Owned emails, YouTube copy, social captions, ads, landing pages, and launch copy.", badge: "Active" },
+  { slug: "swipe-file", title: "Swipe File", blurb: "Outside hooks, formats, and examples for inspiration only.", badge: "Active" },
+  { slug: "voice-style", title: "Voice & Style", blurb: "Founder voice, tone rules, approved phrases, and phrases to avoid.", badge: "Active" },
+  { slug: "audience-intelligence", title: "Audience Intelligence", blurb: "Segments, pains, objections, and messaging notes for launches.", badge: "Active" },
+  { slug: "cta-library", title: "Offer / CTA Library", blurb: "Reusable offers, CTAs, event invitations, lead magnets, and conversion assets.", badge: "Active" },
+  { slug: "platform-playbooks", title: "Platform Playbooks", blurb: "YouTube, email, reels, TikTok, Meta, Pinterest, X, and ads patterns.", badge: "Active" },
+  { slug: "compliance", title: "Compliance Rules", blurb: "Claims, urgency, and public-facing language guardrails.", badge: "Active" },
+  { slug: "campaign-learnings", title: "Campaign Learnings", blurb: "Performance and review lessons approved before trusted reuse.", badge: "Active" },
+  { slug: "source-imports", title: "Source Imports", blurb: "Drive, Obsidian, transcripts, and exports metadata.", badge: "Planned" },
+  { slug: "knowledge-sync", title: "Knowledge Sync", blurb: "Google Drive indexing and Obsidian Markdown preview/export.", badge: "Preview-only" },
 ];
 
 function ContentLibraryHub() {
@@ -2477,7 +2968,7 @@ function ContentLibraryHub() {
       <SectionHeader
         eyebrow="Libraries"
         title="Content Library"
-        description="Reusable copy, voice rules, audience intelligence, offers, platform playbooks, swipe examples, and campaign learnings for stronger launch campaigns — structured for scale and future Copy Intelligence, Performance Intelligence, and knowledge sync."
+        description="Reusable copy, voice rules, audience intelligence, offers, CTAs, platform playbooks, swipe examples, and campaign learnings for stronger launch campaigns. Approved records can support Copy Intelligence and future agent context; candidates, drafts, and inspiration-only items stay review-gated."
         actions={null}
       />
 
@@ -2487,7 +2978,7 @@ function ContentLibraryHub() {
           <div className="min-w-0 flex-1 space-y-2 text-sm leading-6 text-slate-300">
             <p className="font-semibold text-slate-100">Marketing knowledge store</p>
             <p>
-              Approved and active records are the default trusted context for future agents; candidates, drafts, and inspiration-only swipe items stay review-gated. Google Drive indexing and Obsidian export are planned — see Knowledge Sync and Operations when those paths go live.
+              Approved and active records are the trusted knowledge base for future Copy Intelligence, Performance Intelligence, and campaign builders. Drafts, candidates, and inspiration-only swipe items stay review-gated. Google Drive indexing and Obsidian export remain planned or preview-only until explicitly connected.
             </p>
           </div>
         </div>
@@ -2496,40 +2987,55 @@ function ContentLibraryHub() {
       <div>
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Buckets</p>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {HUB_PRIMARY_BUCKETS.map((bucket) => (
-            <Link className="focus-ring block rounded-lg border border-slate-800 bg-slate-950/70 p-4 transition hover:border-slate-600 hover:bg-slate-900/80" href={`/libraries/${bucket.slug}`} key={bucket.slug}>
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-semibold text-slate-100">{bucket.title}</p>
-                <StatusBadge tone={bucket.status === "Active" ? "green" : bucket.status === "Sync-ready" ? "blue" : "gray"}>{bucket.status}</StatusBadge>
-              </div>
-              <p className="mt-2 text-xs leading-5 text-slate-400">{bucket.blurb}</p>
-              <p className="mt-3 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">
-                {bucket.slug === "knowledge-sync" ? (
-                  knowledgeSyncMappings === undefined || knowledgeSyncJobsPreview === undefined ? (
-                    "Loading sync prep…"
-                  ) : (
-                    `${knowledgeSyncMappings.length} mappings · ${knowledgeSyncJobsPreview.length} jobs`
-                  )
-                ) : (bucket.slug === "campaign-learnings" ? convexLearningInsights === undefined : convexLibraryItems === undefined) ? (
-                  "Loading counts…"
-                ) : (
-                  `${countFor(bucket.slug)} records`
-                )}
-              </p>
-            </Link>
-          ))}
+          {HUB_PRIMARY_BUCKETS.map((bucket) => {
+            const n = countFor(bucket.slug);
+            const badgeTone = bucket.badge === "Active" ? "green" : bucket.badge === "Preview-only" ? "blue" : "gray";
+            const countLine = (() => {
+              if (bucket.slug === "knowledge-sync") {
+                if (knowledgeSyncMappings === undefined || knowledgeSyncJobsPreview === undefined) return "Loading sync prep…";
+                return `Preview-only · ${knowledgeSyncMappings.length} prep mappings · ${knowledgeSyncJobsPreview.length} jobs`;
+              }
+              if (bucket.badge === "Planned") return "Planned · metadata-first";
+              if (bucket.slug === "campaign-learnings" ? convexLearningInsights === undefined : convexLibraryItems === undefined) return "Loading counts…";
+              return `Active · ${n} record${n === 1 ? "" : "s"}`;
+            })();
+            return (
+              <Link className="focus-ring block rounded-lg border border-slate-800 bg-slate-950/70 p-4 transition hover:border-slate-600 hover:bg-slate-900/80" href={`/libraries/${bucket.slug}`} key={bucket.slug}>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-semibold text-slate-100">{bucket.title}</p>
+                  <StatusBadge tone={badgeTone}>{bucket.badge}</StatusBadge>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-slate-400">{bucket.blurb}</p>
+                <p className="mt-3 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">{countLine}</p>
+                <p className="mt-2 text-xs font-semibold text-sky-300">Open →</p>
+              </Link>
+            );
+          })}
         </div>
       </div>
 
       <ControlPanel className="p-4">
-        <p className="text-sm font-semibold text-slate-100">Classic library routes</p>
-        <p className="mt-2 text-xs text-slate-400">Original tabs remain supported for day-to-day workflows.</p>
+        <p className="text-sm font-semibold text-slate-100">Library quick links</p>
+        <p className="mt-2 text-xs text-slate-400">Jump to focused views of core library records.</p>
         <div className="mt-3 flex flex-wrap gap-2 text-xs">
-          {(["email", "offers", "voice-rules", "signoffs", "audiences", "compliance", "learning"] as const).map((slug) => (
-            <Link className="rounded-md border border-slate-800 bg-slate-900/80 px-2.5 py-1 font-semibold text-slate-200 hover:border-slate-600" href={`/libraries/${slug}`} key={slug}>
-              {libraryPageConfig[slug].title}
-            </Link>
-          ))}
+          <Link className="rounded-md border border-slate-800 bg-slate-900/80 px-2.5 py-1 font-semibold text-slate-200 hover:border-slate-600" href="/libraries/offers">
+            Offer / CTA Library
+          </Link>
+          <Link className="rounded-md border border-slate-800 bg-slate-900/80 px-2.5 py-1 font-semibold text-slate-200 hover:border-slate-600" href="/libraries/voice-rules">
+            Voice &amp; Style
+          </Link>
+          <Link className="rounded-md border border-slate-800 bg-slate-900/80 px-2.5 py-1 font-semibold text-slate-200 hover:border-slate-600" href="/libraries/signoffs">
+            Sign-offs
+          </Link>
+          <Link className="rounded-md border border-slate-800 bg-slate-900/80 px-2.5 py-1 font-semibold text-slate-200 hover:border-slate-600" href="/libraries/audience-intelligence">
+            Audience Intelligence
+          </Link>
+          <Link className="rounded-md border border-slate-800 bg-slate-900/80 px-2.5 py-1 font-semibold text-slate-200 hover:border-slate-600" href="/libraries/compliance">
+            Compliance Rules
+          </Link>
+          <Link className="rounded-md border border-slate-800 bg-slate-900/80 px-2.5 py-1 font-semibold text-slate-200 hover:border-slate-600" href="/libraries/campaign-learnings">
+            Campaign Learnings
+          </Link>
         </div>
       </ControlPanel>
     </div>
@@ -2915,15 +3421,15 @@ function KnowledgeSyncScreen() {
 
 export function LibraryRouteSection({ slug }: { slug?: string[] }) {
   const segment = slug?.[1];
-  if (!segment) {
-    return <ContentLibraryHub />;
-  }
-  if (segment === "knowledge-sync") {
-    return <KnowledgeSyncScreen />;
-  }
-  if (!isLibraryInventorySegment(segment)) {
-    return <ContentLibraryHub />;
-  }
-  return <LibraryInventoryPage key={segment} libraryKey={segment} />;
+  const inner = !segment ? (
+    <ContentLibraryHub />
+  ) : segment === "knowledge-sync" ? (
+    <KnowledgeSyncScreen />
+  ) : !isLibraryInventorySegment(segment) ? (
+    <ContentLibraryHub />
+  ) : (
+    <LibraryInventoryPage key={segment} libraryKey={segment} />
+  );
+  return <div className="mx-auto w-full max-w-7xl px-4 pb-10 pt-2 sm:px-6 lg:px-8">{inner}</div>;
 }
 

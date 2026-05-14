@@ -9,6 +9,10 @@ export function cn(...inputs: ClassValue[]) {
 export function titleFromSlug(slug?: string[]) {
   if (!slug || slug.length === 0) return "Dashboard";
 
+  if (slug.length === 1 && slug[0] === "intelligence") {
+    return "Copy Intelligence";
+  }
+
   const href = `/${slug.join("/")}`;
   const navMatch = findNavChildByHref(href);
   if (navMatch) return navMatch.title;

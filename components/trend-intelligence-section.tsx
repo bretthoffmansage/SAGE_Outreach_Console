@@ -40,6 +40,25 @@ function linesToArr(s: string) {
     .filter(Boolean);
 }
 
+function labelForTrendTypeValue(value: string) {
+  return TREND_TYPES.find((t) => t.value === value)?.label ?? value.replace(/_/g, " ");
+}
+
+function labelForTrendStatusValue(value: string) {
+  return TREND_STATUSES.find((s) => s.value === value)?.label ?? value;
+}
+
+function formatSafetyMode(mode: string) {
+  const map: Record<string, string> = {
+    dry_run: "Dry-run",
+    read_only: "Read-only",
+    draft_only: "Draft-only",
+    review_assist: "Review assist",
+    learning_candidate: "Learning candidate",
+  };
+  return map[mode] ?? mode.replace(/_/g, " ");
+}
+
 const TREND_AGENTS = [
   { id: "trend_scout_agent", name: "Trend Scout", mode: "dry_run", purpose: "Record or discover signals from manual research or future connectors." },
   { id: "trend_fit_agent", name: "Trend Fit", mode: "review_assist", purpose: "Brand, audience, and campaign relevance scoring." },
@@ -234,11 +253,11 @@ export function TrendIntelligenceSection() {
   }, [newTrend, upsertTrend]);
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-7xl space-y-5">
       <SectionHeader
         eyebrow="Intelligence"
         title="Trend Intelligence"
-        description="Capture and evaluate platform trends, short-form formats, meme ideas, and social patterns before turning them into campaign-safe content. Outside examples are inspiration only — approved means safe to adapt, not to copy verbatim."
+        description="Reviewed inspiration and adaptation ideas from manual research — outside examples are inspiration only. Human-controlled and review-gated; no live platform scraping in this build."
       />
 
       <div className="flex flex-wrap gap-2">
@@ -247,65 +266,110 @@ export function TrendIntelligenceSection() {
         <StatusBadge tone="gray">No live scraping in this build</StatusBadge>
       </div>
 
-      <ControlPanel className="border-slate-800 bg-slate-950/60 p-4">
-        <p className="text-sm font-semibold text-slate-100">Meta and Instagram trend signals</p>
-        <p className="mt-2 text-sm leading-relaxed text-slate-300">
-          Meta and Instagram trend signals are currently manual or planned. Future connector support may help identify content patterns and performance signals,
-          but trend ideas should still be reviewed for brand fit before use. Demo signals are labeled — they are not live platform pulls.
+      <ControlPanel className="border-slate-800 bg-slate-950/60 p-3">
+        <p className="text-xs leading-relaxed text-slate-400">
+          Meta / Instagram trend signals are manual or planned future connectors — demo signals are labeled and are not live pulls. Trend ideas stay review-gated before they inform Copy Intelligence.
         </p>
       </ControlPanel>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          { label: "Total signals", value: stats.total },
-          { label: "Candidates", value: stats.candidate },
-          { label: "Approved", value: stats.approved },
-          { label: "Linked to campaigns", value: stats.linked },
-          { label: "High brand fit (80+)", value: stats.highFit },
-          { label: "Higher risk (60+)", value: stats.highRisk },
-          { label: "Stale / marked stale", value: stats.stale },
-          { label: "Used (30d)", value: stats.usedThisMonth },
-          { label: "Platforms (distinct)", value: stats.platforms },
-        ].map((c) => (
-          <ControlPanel className="p-3" key={c.label}>
-            <p className="text-[0.65rem] font-bold uppercase tracking-[0.16em] text-slate-500">{c.label}</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-100">{c.value}</p>
-          </ControlPanel>
-        ))}
-      </div>
+      <ControlPanel className="p-3">
+        <p className="text-[0.65rem] font-bold uppercase tracking-[0.14em] text-slate-500">Signal overview</p>
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          {[
+            { label: "Total", value: stats.total },
+            { label: "Candidates", value: stats.candidate },
+            { label: "Approved", value: stats.approved },
+            { label: "High fit", value: stats.highFit },
+            { label: "Higher risk", value: stats.highRisk },
+            { label: "Linked", value: stats.linked },
+            { label: "Used (30d)", value: stats.usedThisMonth },
+            { label: "Stale", value: stats.stale },
+            { label: "Platforms", value: stats.platforms },
+          ].map((c) => (
+            <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-2 py-1.5" key={c.label}>
+              <p className="text-[0.6rem] font-semibold uppercase tracking-wide text-slate-500">{c.label}</p>
+              <p className="mt-0.5 text-lg font-semibold text-slate-100">{c.value}</p>
+            </div>
+          ))}
+        </div>
+      </ControlPanel>
 
-      <div className="flex flex-wrap gap-2">
-        <button className={btnPrimary} onClick={() => setShowAdd((v) => !v)} type="button">
-          <Plus className="h-4 w-4" />
-          Add trend signal
-        </button>
-        <button
-          className={btnSecondary}
-          disabled={dryBusy}
-          onClick={() => {
-            setDryBusy(true);
-            void runDry({
-              platform: platform || undefined,
-              campaignId: campaignFromUrl || undefined,
-              query: search || undefined,
-              createdBy: email ?? undefined,
-            })
-              .finally(() => setDryBusy(false));
-          }}
-          type="button"
-        >
-          <Radar className="h-4 w-4" />
-          {dryBusy ? "Running…" : "Run trend research dry run"}
-        </button>
-        <Link className={btnGhost} href="/intelligence/copy">
-          Copy Intelligence
-        </Link>
-        <Link className={btnGhost} href="/operations/integrations">
-          <Link2 className="h-4 w-4" />
-          Operations / integrations
-        </Link>
-      </div>
-
+      <ControlPanel className="p-4">
+        <p className="text-sm font-semibold text-slate-100">Actions &amp; filters</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button className={btnPrimary} onClick={() => setShowAdd((v) => !v)} type="button">
+            <Plus className="h-4 w-4" />
+            Add trend signal
+          </button>
+          <button
+            className={btnSecondary}
+            disabled={dryBusy}
+            onClick={() => {
+              setDryBusy(true);
+              void runDry({
+                platform: platform || undefined,
+                campaignId: campaignFromUrl || undefined,
+                query: search || undefined,
+                createdBy: email ?? undefined,
+              }).finally(() => setDryBusy(false));
+            }}
+            type="button"
+          >
+            <Radar className="h-4 w-4" />
+            {dryBusy ? "Running…" : "Run trend research dry run"}
+          </button>
+          <Link className={btnGhost} href="/intelligence/copy">
+            Copy Intelligence
+          </Link>
+          <Link className={btnGhost} href="/operations/integrations">
+            <Link2 className="h-4 w-4" />
+            Operations / integrations
+          </Link>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3 lg:grid-cols-6">
+          <label className="grid gap-1 text-xs">
+            <span className="text-slate-400">Search</span>
+            <input className={field} onChange={(e) => setSearch(e.target.value)} placeholder="Title or summary" value={search} />
+          </label>
+          <label className="grid gap-1 text-xs">
+            <span className="text-slate-400">Platform</span>
+            <select className={field} onChange={(e) => setPlatform(e.target.value)} value={platform}>
+              <option value="">All</option>
+              {TREND_PLATFORMS.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1 text-xs">
+            <span className="text-slate-400">Status</span>
+            <select className={field} onChange={(e) => setStatus(e.target.value)} value={status}>
+              <option value="">All</option>
+              {TREND_STATUSES.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1 text-xs">
+            <span className="text-slate-400">Trend type</span>
+            <select className={field} onChange={(e) => setTrendType(e.target.value)} value={trendType}>
+              <option value="">All</option>
+              {TREND_TYPES.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1 text-xs">
+            <span className="text-slate-400">Tag contains</span>
+            <input className={field} onChange={(e) => setTagFilter(e.target.value)} value={tagFilter} />
+          </label>
+        </div>
+      </ControlPanel>
       {showAdd ? (
         <ControlPanel className="p-4">
           <p className="text-sm font-semibold text-slate-100">New trend signal</p>
@@ -373,53 +437,6 @@ export function TrendIntelligenceSection() {
         </ControlPanel>
       ) : null}
 
-      <ControlPanel className="p-4">
-        <p className="text-sm font-semibold text-slate-100">Filters</p>
-        <div className="mt-3 grid gap-3 md:grid-cols-3 lg:grid-cols-6">
-          <label className="grid gap-1 text-xs">
-            <span className="text-slate-400">Search</span>
-            <input className={field} onChange={(e) => setSearch(e.target.value)} placeholder="Title or summary" value={search} />
-          </label>
-          <label className="grid gap-1 text-xs">
-            <span className="text-slate-400">Platform</span>
-            <select className={field} onChange={(e) => setPlatform(e.target.value)} value={platform}>
-              <option value="">All</option>
-              {TREND_PLATFORMS.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1 text-xs">
-            <span className="text-slate-400">Status</span>
-            <select className={field} onChange={(e) => setStatus(e.target.value)} value={status}>
-              <option value="">All</option>
-              {TREND_STATUSES.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1 text-xs">
-            <span className="text-slate-400">Trend type</span>
-            <select className={field} onChange={(e) => setTrendType(e.target.value)} value={trendType}>
-              <option value="">All</option>
-              {TREND_TYPES.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1 text-xs">
-            <span className="text-slate-400">Tag contains</span>
-            <input className={field} onChange={(e) => setTagFilter(e.target.value)} value={tagFilter} />
-          </label>
-        </div>
-      </ControlPanel>
-
       <div className="grid gap-4 lg:grid-cols-2">
         <ControlPanel className="p-4">
           <div className="flex items-center gap-2">
@@ -442,15 +459,20 @@ export function TrendIntelligenceSection() {
                   onClick={() => setSelectedId(t.trendId)}
                   type="button"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-slate-100">{t.title}</span>
                     <StatusBadge tone="gray">{labelForPlatform(t.platform)}</StatusBadge>
+                    <StatusBadge tone="amber">{labelForTrendStatusValue(String(t.status))}</StatusBadge>
                   </div>
                   <p className="mt-1 text-slate-500">
-                    {String(t.trendType ?? "—")} · {t.status} · brand {scoreBand(t.brandFitScore as number | undefined)} · risk{" "}
+                    {labelForTrendTypeValue(String(t.trendType ?? ""))} · Brand fit: {scoreBand(t.brandFitScore as number | undefined)} · Risk:{" "}
                     {scoreBand(t.riskScore as number | undefined)}
                   </p>
                   <p className="mt-1 line-clamp-2 text-slate-400">{(t.summary as string) ?? ""}</p>
+                  {Array.isArray((t as Record<string, unknown>).suggestedUses) &&
+                  ((t as Record<string, unknown>).suggestedUses as unknown[]).length > 0 ? (
+                    <p className="mt-1 text-[0.65rem] font-medium text-sky-300/90">Suggested use ideas on file</p>
+                  ) : null}
                 </button>
               ))}
             </div>
@@ -459,10 +481,31 @@ export function TrendIntelligenceSection() {
 
         <ControlPanel className="p-4">
           <p className="text-sm font-semibold text-slate-100">Detail &amp; adaptation</p>
-          {!selectedId || !detail ? (
-            <p className="mt-3 text-xs text-slate-500">Select a trend to edit scores, adaptation ideas, and library actions.</p>
+          {!selectedId ? (
+            <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/50 p-4 text-sm leading-relaxed text-slate-400">
+              Select a trend signal to review adaptation ideas, campaign fit, risk notes, and library actions.
+            </div>
+          ) : detail === undefined ? (
+            <p className="mt-3 text-xs text-slate-500">Loading trend details…</p>
+          ) : !detail ? (
+            <p className="mt-3 text-xs text-amber-100/90">That trend signal was not found.</p>
           ) : (
-            <div className="mt-3 space-y-3 text-xs">
+            <div className="mt-3 space-y-4 text-xs">
+              <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+                <p className="text-[0.65rem] font-bold uppercase tracking-[0.14em] text-slate-500">Read-only summary</p>
+                <p className="mt-2 text-sm text-slate-300">{form.summary || "—"}</p>
+                <p className="mt-2 text-slate-500">
+                  Platform: <span className="text-slate-200">{labelForPlatform(form.platform)}</span> · Status:{" "}
+                  <span className="text-slate-200">{labelForTrendStatusValue(form.status)}</span> · Type:{" "}
+                  <span className="text-slate-200">{labelForTrendTypeValue(form.trendType)}</span>
+                </p>
+                <p className="mt-2 text-slate-500">
+                  Brand fit: <span className="text-slate-200">{scoreBand(form.brandFitScore ? Number(form.brandFitScore) : undefined)}</span> · Risk:{" "}
+                  <span className="text-slate-200">{scoreBand(form.riskScore ? Number(form.riskScore) : undefined)}</span>
+                </p>
+              </div>
+              <p className="text-[0.65rem] font-bold uppercase tracking-[0.14em] text-slate-500">Do not copy directly</p>
+              <p className="text-slate-500">Outside examples are inspiration only — adapt for Sage voice, compliance, and campaign context.</p>
               <p className="text-slate-500">
                 Trend ID: <code className="text-sky-300">{selectedId}</code>
               </p>
@@ -611,24 +654,31 @@ export function TrendIntelligenceSection() {
         </ControlPanel>
       </div>
 
-      <ControlPanel className="p-4">
-        <p className="text-sm font-semibold text-slate-100">Trend Intelligence agents</p>
-        <p className="mt-1 text-xs text-slate-500">Configured agents: {trendConfigs?.length ?? 0}. Dry-run / review-assist posture — no auto-post.</p>
-        <ul className="mt-3 grid gap-2 md:grid-cols-2">
-          {TREND_AGENTS.map((a) => (
-            <li className="rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2 text-xs text-slate-300" key={a.id}>
-              <span className="font-semibold text-slate-100">{a.name}</span>{" "}
-              <StatusBadge tone="gray">{a.mode}</StatusBadge>
-              <p className="mt-1 text-slate-500">{a.purpose}</p>
-            </li>
-          ))}
-        </ul>
-      </ControlPanel>
+      <details className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/50">
+        <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-slate-200 marker:content-none hover:bg-slate-900/60 [&::-webkit-details-marker]:hidden">
+          Trend Intelligence Layers
+          <span className="mt-1 block text-xs font-normal text-slate-500">
+            Configured dry-run and review-assist layers. They do not scrape, post, or approve content in this build.
+          </span>
+        </summary>
+        <div className="border-t border-slate-800 px-4 py-3">
+          <p className="text-xs text-slate-500">Configured agents in Convex: {trendConfigs?.length ?? 0}</p>
+          <ul className="mt-3 grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+            {TREND_AGENTS.map((a) => (
+              <li className="rounded-lg border border-slate-800 bg-slate-950/50 px-2.5 py-2 text-xs text-slate-300" key={a.id}>
+                <span className="font-semibold text-slate-100">{a.name}</span>{" "}
+                <StatusBadge tone="gray">{formatSafetyMode(a.mode)}</StatusBadge>
+                <p className="mt-1 text-[0.7rem] leading-snug text-slate-500">{a.purpose}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </details>
 
-      <ControlPanel className="p-4">
+      <ControlPanel className="p-3">
         <p className="text-sm font-semibold text-slate-100">Recent trend research runs</p>
         {(researchRuns ?? []).length === 0 ? (
-          <p className="mt-2 text-xs text-slate-500">No research runs yet. Dry run logs sessions without browsing the web.</p>
+          <p className="mt-2 text-xs text-slate-500">No trend research dry runs yet.</p>
         ) : (
           <ul className="mt-2 space-y-2 text-xs text-slate-400">
             {(researchRuns ?? []).map((r: { runId: string; summary?: string; status: string; startedAt: number }) => (
@@ -641,14 +691,14 @@ export function TrendIntelligenceSection() {
         )}
       </ControlPanel>
 
-      <ControlPanel className="p-4">
+      <ControlPanel className="p-3">
         <div className="flex items-center gap-2">
           <ShieldAlert className="h-4 w-4 text-amber-300" />
-          <p className="text-sm font-semibold text-slate-100">Copy Intelligence &amp; trust</p>
+          <p className="text-sm font-semibold text-slate-100">Trust note</p>
         </div>
-        <p className="mt-2 text-xs text-slate-400">
-          Approved or used trends can inform Copy Intelligence as trusted context later. Candidate trends stay optional inspiration. Rejected,
-          archived, and stale trends should not feed automation unless explicitly reopened.
+        <p className="mt-2 text-xs leading-relaxed text-slate-400">
+          Approved or used trends can inform Copy Intelligence as optional context. Candidate, rejected, archived, or stale trends remain review-gated and should
+          not be treated as instructions.
         </p>
       </ControlPanel>
     </div>

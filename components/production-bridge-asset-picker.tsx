@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
@@ -34,16 +34,21 @@ export function ProductionBridgeAssetPicker({
   const [hasTranscript, setHasTranscript] = useState(false);
   const [hasShorts, setHasShorts] = useState(false);
   const [onlyUnlinked, setOnlyUnlinked] = useState(false);
+  const [assetLimit, setAssetLimit] = useState(8);
 
   const rows = useQuery(api.productionAssets.listProductionAssets, {
     search: search.trim() || undefined,
     assetType: assetType || undefined,
     readinessStatus: readinessStatus || undefined,
-    limit: 60,
+    limit: assetLimit,
     hasTranscript: hasTranscript || undefined,
     hasShorts: hasShorts || undefined,
     onlyUnlinked: onlyUnlinked || undefined,
   });
+
+  const showMoreAssets = useCallback(() => {
+    setAssetLimit((n) => Math.min(n + 12, 60));
+  }, []);
 
   const staleMs = 14 * 24 * 60 * 60 * 1000;
   const now = Date.now();
@@ -60,7 +65,7 @@ export function ProductionBridgeAssetPicker({
       );
     }
     return (
-      <div className="max-h-[340px] space-y-2 overflow-y-auto pr-1">
+      <div className="space-y-2">
         {rows.map((asset) => {
           const stale = typeof asset.lastSyncedAt === "number" && now - asset.lastSyncedAt > staleMs;
           return (
@@ -100,16 +105,25 @@ export function ProductionBridgeAssetPicker({
             </div>
           );
         })}
+        {rows.length === assetLimit && assetLimit < 60 ? (
+          <button
+            className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800"
+            onClick={showMoreAssets}
+            type="button"
+          >
+            Show more assets ({rows.length} shown — up to 60)
+          </button>
+        ) : null}
       </div>
     );
-  }, [rows, now, staleMs, onSelect]);
+  }, [rows, now, staleMs, onSelect, assetLimit, showMoreAssets]);
 
   return (
     <ControlPanel className={cn("p-4", className)}>
       <p className="text-sm font-semibold text-slate-100">Select from Production Hub</p>
       <p className="mt-1 text-xs leading-5 text-slate-400">
-        Choose a production asset to use as the source for this launch packet. Outreach Console stores a marketing-facing reference while Production Hub
-        remains the production source of truth.
+        Select a production asset to start from, or leave blank and enter source details manually in Launch Defaults. Outreach stores a marketing-facing
+        reference; Production Hub remains the production source of truth.
       </p>
       {showFilters ? (
         <div className="mt-3 grid gap-2 border-t border-slate-800 pt-3 md:grid-cols-2 lg:grid-cols-3">

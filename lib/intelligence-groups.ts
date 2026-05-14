@@ -11,9 +11,33 @@ export const INTELLIGENCE_GROUP_LABELS = {
   performance: "Performance Intelligence",
   learning: "Learning Loop",
   platform_connector: "Platform Connector Intelligence",
+  response: "Response Intelligence",
+  runtime_hermes: "Runtime / Hermes coordination",
 } as const;
 
 export type IntelligenceGroupKey = keyof typeof INTELLIGENCE_GROUP_LABELS;
+
+/** Order for Intelligence Runtime Map section headers (operator lanes first, coordination last). */
+export const INTELLIGENCE_GROUP_SORT_KEYS: IntelligenceGroupKey[] = [
+  "copy",
+  "trend",
+  "performance",
+  "platform_connector",
+  "heartbeat",
+  "learning",
+  "response",
+  "runtime_hermes",
+  "production",
+];
+
+export function compareIntelligenceGroupKeys(a: IntelligenceGroupKey | null, b: IntelligenceGroupKey | null): number {
+  const rank = (k: IntelligenceGroupKey | null) => {
+    if (!k) return INTELLIGENCE_GROUP_SORT_KEYS.length + 2;
+    const i = INTELLIGENCE_GROUP_SORT_KEYS.indexOf(k);
+    return i === -1 ? INTELLIGENCE_GROUP_SORT_KEYS.length + 1 : i;
+  };
+  return rank(a) - rank(b) || String(a ?? "").localeCompare(String(b ?? ""));
+}
 
 const AGENT_ID_TO_GROUP: Partial<Record<string, IntelligenceGroupKey>> = {
   campaign_intake: "copy",
@@ -34,7 +58,7 @@ const AGENT_ID_TO_GROUP: Partial<Record<string, IntelligenceGroupKey>> = {
   transcript_summary_bridge: "production",
   shorts_availability_checker: "production",
   production_to_campaign_mapper: "production",
-  response_classifier: "copy",
+  response_classifier: "response",
   performance_reporter: "performance",
   learning_agent: "learning",
   copy_pipeline: "copy",

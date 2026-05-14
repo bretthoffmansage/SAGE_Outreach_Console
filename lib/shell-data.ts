@@ -22,13 +22,13 @@ export const demoHealthItems = [
 export const headerNotifications = [
   {
     id: "notif_bari_review",
-    title: "Bari copy review needed",
+    title: "Founder-voice review queued",
     description: "Founder-voice pass is queued for the weekly launch email draft (escalation, not every send).",
     href: "/reviews/bari",
   },
   {
     id: "notif_blue_review",
-    title: "Blue approval needed",
+    title: "Strategic review queued",
     description: "One strategic claim on the September registration warmup packet still needs Blue review.",
     href: "/reviews/blue",
   },

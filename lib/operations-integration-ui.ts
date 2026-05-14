@@ -46,9 +46,9 @@ export const OPERATIONS_CATEGORY_SECTIONS: OperationsCategorySection[] = [
         relatedWorkflows: "Production Bridge, YouTube rollout",
       },
       {
-        name: "Google Drive",
-        purpose: "Source folders and exports — indexing is future-facing only.",
-        relatedWorkflows: "Production Bridge, Knowledge and Library",
+        name: "Google Drive (production assets)",
+        purpose: "Source folders and exports for production/reference files — indexing is future-facing only; Outreach does not write to Drive in this build.",
+        relatedWorkflows: "Production Bridge, asset exports",
       },
     ],
   },
@@ -59,10 +59,10 @@ export const OPERATIONS_CATEGORY_SECTIONS: OperationsCategorySection[] = [
       "Planned indexing and export paths for library records, copy archive, swipe files, and company knowledge graph materials — not live.",
     placeholders: [
       {
-        name: "Google Drive",
+        name: "Google Drive (library index)",
         purpose:
-          "Planned read-only index of selected marketing folders. Outreach Console will not modify or delete Drive files in current mode.",
-        relatedWorkflows: "Library indexing, Source imports, Production Bridge references",
+          "Planned read-only index for library records and Obsidian export metadata — separate scope from production asset folders; no Drive writes from the console.",
+        relatedWorkflows: "Library indexing, Knowledge sync, Production Bridge references",
       },
       {
         name: "Obsidian",
@@ -88,14 +88,15 @@ export const OPERATIONS_CATEGORY_SECTIONS: OperationsCategorySection[] = [
         relatedWorkflows: "Social rollout, Campaign launch readiness",
       },
       {
-        name: "Meta / Instagram / Facebook",
+        name: "Meta / Instagram / Facebook (social surface)",
         purpose:
-          "Future connector for Meta-owned social surfaces — performance and content insight workflows; manual and read-only planned. No posting or account changes.",
+          "General social surface connector — captions, rollout tracking, and organic performance context. Planned/manual/read-only; no posting or account changes.",
         relatedWorkflows: "Social rollout, Performance Intelligence, Trend Intelligence",
       },
       {
-        name: "Meta Ads",
-        purpose: "Future read-only ads intelligence — creative, audience, placement, and campaign performance snapshots; no budget or campaign mutations.",
+        name: "Meta Ads (ads intelligence)",
+        purpose:
+          "Ad intelligence and performance snapshots layer — separate from organic social. Planned read-only; no budget, campaign, or creative mutations from Outreach.",
         relatedWorkflows: "Performance Intelligence, Campaign planning",
       },
       {
@@ -109,8 +110,9 @@ export const OPERATIONS_CATEGORY_SECTIONS: OperationsCategorySection[] = [
         relatedWorkflows: "Performance Intelligence, Platform insights",
       },
       {
-        name: "Meta Connector / MCP",
-        purpose: "Future AI-assisted read/analyze layer where supported — write actions require a separate approval-gated implementation.",
+        name: "Meta Connector / MCP (AI-assisted layer)",
+        purpose:
+          "Future AI-assisted read/analyze connector — not the same as organic social or Ads snapshots. Write actions require a separate approval-gated implementation.",
         relatedWorkflows: "Operations checks, Intelligence agents",
       },
       {
@@ -147,7 +149,7 @@ export const OPERATIONS_CATEGORY_SECTIONS: OperationsCategorySection[] = [
     id: "ai_runtime",
     title: "AI and Runtime",
     description:
-      "Model providers, Copy Intelligence / LangGraph orchestration, the planned Hermes by Nous local Mac mini autonomous runtime, auth, backend persistence, and deployment health — configurable; live execution only when keys, HERMES_RUNTIME_URL, and policies allow. Default posture remains dry-run, read-only, and approval-gated for external actions.",
+      "Model providers, Copy Intelligence / LangGraph orchestration, auth, backend persistence, and deployment health. Hermes by Nous can later coordinate approved workflows from the office Mac mini once HERMES_RUNTIME_URL and policies are configured. Default posture remains dry-run, read-only, and approval-gated for external actions — not live autonomous execution by default.",
     placeholders: [],
   },
 ];

@@ -34,6 +34,8 @@ export type NavChild = {
   match?: "exact" | "prefix";
   activePrefixes?: string[];
   excludedPrefixes?: string[];
+  /** Exact pathname matches only (e.g. `/intelligence` landing without a sub-segment). */
+  activeExactPaths?: string[];
 };
 
 export type NavCategory = {
@@ -67,7 +69,7 @@ export const navGroups: NavCategory[] = [
     defaultHref: "/campaigns",
     children: [
       {
-        title: "Campaigns",
+        title: "Launch Packets",
         href: "/campaigns",
         icon: Megaphone,
         description:
@@ -76,7 +78,7 @@ export const navGroups: NavCategory[] = [
         excludedPrefixes: ["/campaigns/new", "/campaigns/create"],
       },
       {
-        title: "Create Campaign",
+        title: "Create Launch Packet",
         href: "/campaigns/new",
         icon: PenLine,
         description: "Guided intake for a new launch packet or campaign record.",
@@ -107,23 +109,69 @@ export const navGroups: NavCategory[] = [
         title: "Content Library",
         href: "/libraries",
         icon: Database,
-        description: "Hub for Copy Archive, Swipe File, Voice & Style, Audience Intelligence, CTAs, playbooks, learnings, and future sync.",
+        description: "Hub for Copy Archive, Swipe File, Voice & Style, Audience Intelligence, Offer/CTA, playbooks, learnings, and Knowledge Sync.",
         match: "exact",
       },
-      { title: "Offers & Lead Magnets", href: "/libraries/offers", icon: Tags, description: "Reusable offers, lead magnets, CTAs, and conversion assets for launch packets.", match: "prefix" },
-      { title: "Bari Voice Rules", href: "/libraries/voice-rules", icon: Sparkles, description: "Founder-voice and brand-sensitive guidance when Bari tone is needed.", match: "prefix" },
-      { title: "Sign-off Library", href: "/libraries/signoffs", icon: PenLine, description: "Approved sign-offs and closings selectable by context and voice.", match: "prefix" },
-      { title: "Audience Library", href: "/libraries/audiences", icon: Users, description: "Audience intelligence: segments, pain points, objections, motivations, exclusions.", match: "prefix" },
+      {
+        title: "Offer / CTA Library",
+        href: "/libraries/offers",
+        icon: Tags,
+        description: "Reusable offers, CTAs, event invitations, lead magnets, and conversion assets for launch packets.",
+        match: "prefix",
+      },
+      {
+        title: "Voice & Style",
+        href: "/libraries/voice-rules",
+        icon: Sparkles,
+        description: "Founder voice, tone rules, and brand-sensitive guidance — one part of the broader voice & style system.",
+        match: "prefix",
+      },
+      {
+        title: "Sign-offs",
+        href: "/libraries/signoffs",
+        icon: PenLine,
+        description: "Approved sign-offs and closing lines for weekly launch voice and CTA endings — trusted use stays operator-gated.",
+        match: "prefix",
+      },
+      {
+        title: "Audience Intelligence",
+        href: "/libraries/audience-intelligence",
+        icon: Users,
+        description: "Segments, pain points, objections, motivations, exclusions, and messaging notes for launches.",
+        match: "prefix",
+      },
       { title: "Compliance Rules", href: "/libraries/compliance", icon: ShieldCheck, description: "Claims, promise, urgency, and public-facing language guardrails.", match: "prefix" },
-      { title: "Learning Library", href: "/libraries/learning", icon: BrainCircuit, description: "Reusable learnings from edits, outcomes, and reviews — curated, not auto-fed.", match: "prefix" },
+      {
+        title: "Campaign Learnings",
+        href: "/libraries/campaign-learnings",
+        icon: BrainCircuit,
+        description: "Approved learnings from performance and reviews — curated, not auto-fed.",
+        match: "prefix",
+      },
+      {
+        title: "Knowledge Sync",
+        href: "/libraries/knowledge-sync",
+        icon: Link2,
+        description: "Planned Google Drive indexing and Obsidian Markdown preview — manual until connectors ship.",
+        match: "prefix",
+      },
     ],
   },
   {
     id: "intelligence",
     title: "Intelligence",
     icon: GitBranch,
-    defaultHref: "/intelligence/langgraph",
+    defaultHref: "/intelligence/copy",
     children: [
+      {
+        title: "Copy Intelligence",
+        href: "/intelligence/copy",
+        icon: Sparkles,
+        description:
+          "Human-controlled multi-agent copy pipeline: angles, hooks, drafts, voice/CTA/claims review, and learning candidates — dry-run by default.",
+        match: "prefix",
+        activeExactPaths: ["/intelligence"],
+      },
       {
         title: "Trend Intelligence",
         href: "/intelligence/trends",
@@ -132,28 +180,36 @@ export const navGroups: NavCategory[] = [
         match: "prefix",
       },
       {
-        title: "Copy Intelligence",
-        href: "/intelligence/copy",
-        icon: Sparkles,
-        description: "Human-controlled multi-agent copy pipeline: angles, hooks, drafts, voice/CTA/claims review, and learning candidates — dry-run by default.",
+        title: "Performance Intelligence",
+        href: "/intelligence/performance",
+        icon: BarChart3,
+        description:
+          "Track campaign results, compare launch patterns, and turn performance evidence into reusable learnings — manual and demo until read-only integrations connect.",
         match: "prefix",
       },
       {
         title: "Campaign Heartbeat",
         href: "/intelligence/heartbeat",
         icon: HeartPulse,
-        description: "Recent heartbeat checks: daily readiness, missing items, and tasks generated from launch packet data.",
+        description: "Audit trail for Campaign Heartbeat checks — daily execution stays on Home.",
         match: "prefix",
       },
-      { title: "LangGraph Map", href: "/intelligence/langgraph", icon: GitBranch, description: "Copy Intelligence: active agents, LangGraph handoffs, dry-run tests, and human approval pauses.", match: "prefix" },
-      { title: "Agent Runs", href: "/intelligence/agent-runs", icon: Bot, description: "Dry-run traces and configured activity across intelligence lanes — not autonomous execution.", match: "prefix" },
-      { title: "Response Intelligence", href: "/intelligence/responses", icon: MessageCircle, description: "Inbound reply classification and draft suggestions — manual send only.", match: "prefix" },
-      { title: "Performance Intelligence", href: "/intelligence/performance", icon: BarChart3, description: "Track campaign results, compare launch patterns, and turn performance evidence into reusable learnings — manual and demo until read-only integrations connect.", match: "prefix" },
       {
-        title: "Platform Connector Intelligence",
+        title: "Platform Connectors",
         href: "/intelligence/platform-connector",
         icon: Link2,
-        description: "Meta / social connector readiness and dry-run agents — feeds Performance, Trend, and Copy context without posting or ad mutations.",
+        description:
+          "Meta / social connector readiness and dry-run agents — feeds Performance, Trend, and Copy context without posting or ad mutations.",
+        match: "prefix",
+      },
+      { title: "Response Intelligence", href: "/intelligence/responses", icon: MessageCircle, description: "Inbound reply classification and draft suggestions — manual send only.", match: "prefix" },
+      { title: "Agent Runs", href: "/intelligence/agent-runs", icon: Bot, description: "Dry-run traces and configured activity across intelligence lanes — not autonomous execution.", match: "prefix" },
+      {
+        title: "Runtime Map",
+        href: "/intelligence/langgraph",
+        icon: GitBranch,
+        description:
+          "Configured and planned intelligence layers, safety modes, and handoffs — inspection and configuration view; dry-run by default.",
         match: "prefix",
       },
     ],
@@ -171,7 +227,13 @@ export const navGroups: NavCategory[] = [
         description: "Categorized launch integrations: production, knowledge, social, email/CRM, AI/runtime — manual by default.",
         match: "prefix",
       },
-      { title: "Keap Sync", href: "/operations/keap", icon: Send, description: "Keap handoff and registration prep — manual export, no auto-send.", match: "prefix" },
+      {
+        title: "Email / CRM Handoff",
+        href: "/operations/keap",
+        icon: Send,
+        description: "Manual handoff packages for Emailmarketing.com, Keap/CRM tags, and webhook prep — no auto-send or live CRM API calls in this build.",
+        match: "prefix",
+      },
       {
         title: "Production Bridge",
         href: "/operations/production-bridge",
@@ -190,6 +252,10 @@ export function isChildActive(pathname: string, child: NavChild) {
 
   if (excludedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
     return false;
+  }
+
+  if (child.activeExactPaths?.some((path) => pathname === path)) {
+    return true;
   }
 
   if (child.match === "exact") {

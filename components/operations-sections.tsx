@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { ArrowLeft, ChevronRight, Download, KeyRound, Send, Settings2 } from "lucide-react";
+import { ArrowLeft, Download, KeyRound, Send, Settings2 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { useAppUser } from "@/components/auth/app-user-context";
@@ -28,12 +28,52 @@ function tone(status: string) {
   return "gray";
 }
 
+function titleCaseSnake(s: string): string {
+  if (!s) return "";
+  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function formatStatus(status: string) {
-  return status.replace(/_/g, " ");
+  const k = status.toLowerCase();
+  const map: Record<string, string> = {
+    connected: "Connected",
+    manual_mode: "Manual mode",
+    demo_fallback: "Demo fallback",
+    missing_credentials: "Missing credentials",
+    not_configured: "Not configured",
+    error: "Error",
+    manual_fallback: "Manual fallback",
+    planned: "Planned",
+    read_only_future: "Read-only future",
+    read_only: "Read-only",
+  };
+  return map[k] ?? titleCaseSnake(status);
+}
+
+function humanizeConnectorModeDisplay(mode?: string | null): string {
+  if (!mode) return "—";
+  const k = mode.toLowerCase();
+  const map: Record<string, string> = {
+    read_only_default: "Read-only default",
+    read_only_future: "Read-only future",
+    read_only_sync: "Read-only sync",
+  };
+  return map[k] ?? titleCaseSnake(mode);
+}
+
+function humanizeSafetyLevelDisplay(level?: string | null): string {
+  if (!level) return "—";
+  const k = level.toLowerCase();
+  const map: Record<string, string> = {
+    approval_required: "Approval required",
+    read_only_default: "Read-only default",
+    no_write_actions: "No write actions",
+  };
+  return map[k] ?? titleCaseSnake(level);
 }
 
 function formatTimestamp(value?: number) {
-  if (!value) return "not checked";
+  if (!value) return "Not checked";
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
@@ -74,26 +114,23 @@ function useSeedIntegrations(records: IntegrationRecord[] | undefined) {
 
 function PlannedIntegrationCard({ name, purpose, relatedWorkflows }: { name: string; purpose: string; relatedWorkflows: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-slate-600/60 bg-slate-950/35 px-3 py-3">
+    <div className="rounded-xl border border-dashed border-slate-600/50 bg-slate-950/30 px-3 py-2.5 opacity-95">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <p className="text-sm font-semibold text-slate-200">{name}</p>
         <StatusBadge tone="gray">Planned</StatusBadge>
       </div>
-      <p className="mt-1 text-xs leading-5 text-slate-500">{purpose}</p>
-      <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-[0.65rem] leading-snug text-slate-500">
-        <dt className="text-slate-600">Mode</dt>
-        <dd className="text-slate-400">Manual</dd>
-        <dt className="text-slate-600">Last checked</dt>
-        <dd className="text-slate-400">Not connected</dd>
-        <dt className="text-slate-600">Last synced</dt>
-        <dd className="text-slate-400">Not synced</dd>
-        <dt className="text-slate-600">Required setup</dt>
-        <dd className="text-slate-400">Future integration</dd>
-        <dt className="text-slate-600">Safety</dt>
-        <dd className="text-slate-400">Read-only</dd>
-        <dt className="col-span-2 text-slate-600">Related workflows</dt>
-        <dd className="col-span-2 text-slate-400">{relatedWorkflows}</dd>
-      </dl>
+      <p className="mt-1 text-xs leading-snug text-slate-500">{purpose}</p>
+      <div className="mt-2 space-y-1 border-t border-slate-800/60 pt-2 text-[0.65rem] leading-snug text-slate-500">
+        <p>
+          <span className="text-slate-600">Mode</span> · Manual · <span className="text-slate-600">Safety</span> · Read-only
+        </p>
+        <p>
+          <span className="text-slate-600">Setup</span> · Future integration · <span className="text-slate-600">Sync</span> · Not connected
+        </p>
+        <p className="text-slate-600">
+          Workflows: <span className="text-slate-500">{relatedWorkflows}</span>
+        </p>
+      </div>
     </div>
   );
 }
@@ -105,48 +142,53 @@ function IntegrationRecordButton({
   integration: IntegrationRecord;
   onSelect: (integrationId: string) => void;
 }) {
+  const modeLabel = integration.connectorMode
+    ? humanizeConnectorModeDisplay(integration.connectorMode)
+    : integration.status === "connected"
+      ? "Live check"
+      : "Manual / dry-run";
+  const safetyLabel = integration.safetyLevel
+    ? humanizeSafetyLevelDisplay(integration.safetyLevel)
+    : integration.status === "connected"
+      ? "Approval required for writes"
+      : "Read-only / draft";
+
   return (
     <button
       type="button"
       onClick={() => onSelect(integration.integrationId)}
-      className="focus-ring block w-full rounded-xl border border-slate-800 bg-slate-950/75 px-4 py-3 text-left transition hover:border-slate-700 hover:bg-slate-900/90"
+      className="focus-ring block w-full rounded-xl border border-slate-800 bg-slate-950/75 px-3 py-2.5 text-left transition hover:border-slate-700 hover:bg-slate-900/90"
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <StatusDot tone={tone(integration.status)} />
             <p className="text-sm font-semibold text-slate-100">{integration.name}</p>
             <StatusBadge tone={tone(integration.status)}>{integration.statusLabel || formatStatus(integration.status)}</StatusBadge>
           </div>
-          <p className="mt-2 text-sm text-slate-300">{integration.purpose}</p>
-          <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-[0.65rem] text-slate-400">
-            <dt className="text-slate-600">Mode</dt>
-            <dd>
-              {integration.connectorMode
-                ? integration.connectorMode.replace(/_/g, " ")
-                : integration.status === "connected"
-                  ? "Live check"
-                  : "Manual / dry-run"}
-            </dd>
-            <dt className="text-slate-600">Last check</dt>
-            <dd>{formatTimestamp(integration.lastCheckAt)}</dd>
-            <dt className="text-slate-600">Last synced</dt>
-            <dd>{formatTimestamp(integration.lastSync)}</dd>
-            <dt className="text-slate-600">Safety</dt>
-            <dd>
-              {integration.safetyLevel
-                ? integration.safetyLevel.replace(/_/g, " ")
-                : integration.status === "connected"
-                  ? "Approval required for writes"
-                  : "Read-only / draft"}
-            </dd>
-            <dt className="col-span-2 text-slate-600">Related workflows</dt>
-            <dd className="col-span-2">{integration.relatedWorkflows ?? "Launch coordination, Intelligence, Reviews"}</dd>
-          </dl>
+          <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-400">{integration.purpose}</p>
+          <div className="mt-2 space-y-1 text-[0.65rem] leading-snug text-slate-500">
+            <p>
+              <span className="text-slate-600">Mode</span> · {modeLabel} · <span className="text-slate-600">Safety</span> · {safetyLabel}
+            </p>
+            <p>
+              <span className="text-slate-600">Last check</span> · {formatTimestamp(integration.lastCheckAt)} · <span className="text-slate-600">Last sync</span> ·{" "}
+              {integration.lastSync ? formatTimestamp(integration.lastSync) : "Not synced"}
+            </p>
+            <p className="line-clamp-2 text-slate-600">
+              Setup:{" "}
+              <span className="text-slate-500">
+                {integration.missingEnvVars?.length
+                  ? "Missing credentials — open detail for required keys"
+                  : integration.setupNotes || "See detail for environment variables and checks"}
+              </span>
+            </p>
+            <p className="text-slate-600">
+              Workflows: <span className="text-slate-500">{integration.relatedWorkflows ?? "Launch coordination, Intelligence, Reviews"}</span>
+            </p>
+          </div>
         </div>
-        <span className="mt-1 inline-flex shrink-0 items-center gap-1 text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">
-          Open <ChevronRight className="h-3.5 w-3.5" />
-        </span>
+        <span className="shrink-0 pt-0.5 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-slate-500">Details</span>
       </div>
     </button>
   );
@@ -214,7 +256,7 @@ function IntegrationDetail({
                   .finally(() => setMetaReadinessBusy(false));
               }}
             >
-              <Button variant="secondary">{metaReadinessBusy ? "Running…" : "Meta readiness (dry-run)"}</Button>
+              <Button variant="secondary">{metaReadinessBusy ? "Running…" : "Run Meta connector readiness check"}</Button>
             </button>
           ) : null}
           <button
@@ -257,7 +299,10 @@ function IntegrationDetail({
 
       {metaReadinessText ? (
         <ControlPanel className="p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Meta readiness (dry-run)</p>
+          <p className="text-sm font-semibold text-slate-100">Meta connector readiness dry-run</p>
+          <p className="mt-2 text-sm leading-relaxed text-slate-300">
+            Checks local configuration and Convex integration records only. It does not call Meta APIs, print secret values, or enable posting, ad edits, budget changes, or audience mutations.
+          </p>
           <pre className="mt-2 whitespace-pre-wrap text-sm text-slate-300">{metaReadinessText}</pre>
         </ControlPanel>
       ) : null}
@@ -306,7 +351,7 @@ function IntegrationDetail({
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-sm font-mono text-slate-100">{envKey}</p>
                     <StatusBadge tone={configured ? "green" : missing ? "amber" : "gray"}>
-                      {configured ? "detected" : missing ? "missing" : "unchecked"}
+                      {configured ? "Detected" : missing ? "Missing" : "Unchecked"}
                     </StatusBadge>
                   </div>
                 </div>
@@ -386,11 +431,11 @@ export function IntegrationsSection() {
 
   if (integrations === undefined) {
     return (
-      <div className="space-y-5">
+      <div className="mx-auto max-w-7xl space-y-5">
         <SectionHeader
           eyebrow="Operations"
           title="Integrations"
-          description="Weekly launch hub: integration safety, manual and dry-run defaults, and roadmap bridges for production assets, knowledge sync, social publishing, email/CRM, and AI runtime — live checks only update Convex; no external writes from this view."
+          description="Grouped connection readiness for production assets, knowledge sync, social platforms, email/CRM, and AI/runtime. Most cards are planned, manual, or read-only until credentials and approval policies are intentionally enabled."
         />
         <ControlPanel className="p-4">
           <p className="text-sm text-slate-300">Loading integration records...</p>
@@ -400,25 +445,32 @@ export function IntegrationsSection() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="mx-auto max-w-7xl space-y-5">
       {!selectedIntegration ? (
         <>
           <SectionHeader
             eyebrow="Operations"
             title="Integrations"
-            description="Weekly launch hub: grouped connections for production assets, knowledge sync, social publishing, email/CRM, and AI/runtime. Convex-backed rows open for Check connection; dashed cards are planned only — not live integrations."
+            description="Grouped connection readiness for production assets, knowledge sync, social platforms, email/CRM, and AI/runtime. Most cards are planned, manual, or read-only until credentials and approval policies are intentionally enabled."
             actions={overallHealth ? <StatusBadge tone={overallHealth.status === "healthy" ? "green" : overallHealth.status === "warning" ? "amber" : "red"}>{`System ${overallHealth.status}`}</StatusBadge> : undefined}
           />
+          {overallHealth?.status === "warning" ? (
+            <ControlPanel className="border-amber-500/30 bg-amber-950/20 p-3">
+              <p className="text-sm text-amber-100">
+                <span className="font-semibold">System warning:</span> Missing credentials or planned/manual integrations require setup before live checks. Open
+                each integration card for required keys — no external calls run from this list.
+              </p>
+            </ControlPanel>
+          ) : null}
           {seedError ? (
             <ControlPanel className="border-rose-500/40 p-4">
               <p className="text-sm text-rose-200">{seedError}</p>
             </ControlPanel>
           ) : null}
           <ControlPanel className="p-4">
-            <p className="text-sm font-semibold text-slate-100">Meta connector readiness (dry-run)</p>
+            <p className="text-sm font-semibold text-slate-100">Meta connector readiness dry-run</p>
             <p className="mt-1 text-xs leading-relaxed text-slate-500">
-              Meta integrations are planned or manual. This check reads Convex integration rows and environment variable presence only — it does not call Meta
-              APIs or print secret values.
+              Checks local configuration and Convex integration records only. It does not call Meta APIs, print secret values, or enable posting, ad edits, budget changes, or audience mutations.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button
@@ -461,25 +513,45 @@ export function IntegrationsSection() {
               const live = integrationsByCategory[section.id] ?? [];
               const showSection = live.length > 0 || section.placeholders.length > 0;
               if (!showSection) return null;
+              const collapsible = section.id === "publishing_social" || section.id === "ai_runtime";
+              const grid = (
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {live.map((integration) => (
+                    <IntegrationRecordButton integration={integration} key={integration.integrationId} onSelect={setSelectedIntegrationId} />
+                  ))}
+                  {section.placeholders.map((placeholder) => (
+                    <PlannedIntegrationCard
+                      key={placeholder.name}
+                      name={placeholder.name}
+                      purpose={placeholder.purpose}
+                      relatedWorkflows={placeholder.relatedWorkflows}
+                    />
+                  ))}
+                </div>
+              );
+              if (collapsible) {
+                return (
+                  <details key={section.id} className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950/30">
+                    <summary className="cursor-pointer list-none px-3 py-2.5 marker:content-none hover:bg-slate-900/50 [&::-webkit-details-marker]:hidden">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-100">{section.title}</p>
+                        <span className="text-xs text-slate-500">
+                          {live.length} configured · {section.placeholders.length} planned
+                        </span>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-xs text-slate-500">{section.description}</p>
+                    </summary>
+                    <div className="border-t border-slate-800 px-3 py-3">{grid}</div>
+                  </details>
+                );
+              }
               return (
                 <div className="space-y-3" key={section.id}>
                   <div className="border-b border-slate-800 pb-2">
                     <p className="text-sm font-semibold text-slate-100">{section.title}</p>
                     <p className="mt-1 text-xs leading-5 text-slate-500">{section.description}</p>
                   </div>
-                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                    {live.map((integration) => (
-                      <IntegrationRecordButton integration={integration} key={integration.integrationId} onSelect={setSelectedIntegrationId} />
-                    ))}
-                    {section.placeholders.map((placeholder) => (
-                      <PlannedIntegrationCard
-                        key={placeholder.name}
-                        name={placeholder.name}
-                        purpose={placeholder.purpose}
-                        relatedWorkflows={placeholder.relatedWorkflows}
-                      />
-                    ))}
-                  </div>
+                  {grid}
                 </div>
               );
             })}
@@ -490,6 +562,18 @@ export function IntegrationsSection() {
       )}
     </div>
   );
+}
+
+function humanizeKeapJobStatus(status?: string): string {
+  if (!status) return "Not prepared";
+  const k = status.toLowerCase();
+  const map: Record<string, string> = {
+    draft: "Draft",
+    ready_for_manual_export: "Ready for manual export",
+    exported_manually: "Exported manually",
+    error: "Error",
+  };
+  return map[k] ?? titleCaseSnake(status);
 }
 
 export function KeapOperationsSection() {
@@ -528,7 +612,7 @@ export function KeapOperationsSection() {
     setError(null);
     try {
       await Promise.all(readyCampaigns.map((campaign) => prepareKeapManualExport({ campaignId: campaign.campaignId })));
-      setMessage("Manual export packages prepared.");
+      setMessage("Handoff export packages prepared (local queue only — nothing sent externally).");
     } catch {
       setError("Unable to update integration. Check Convex connection.");
     } finally {
@@ -542,7 +626,7 @@ export function KeapOperationsSection() {
     setError(null);
     try {
       await Promise.all(readyCampaigns.map((campaign) => queueKeapManualHandoff({ campaignId: campaign.campaignId })));
-      setMessage("Manual Keap handoff queue updated.");
+      setMessage("Manual handoff packages queued (local only — nothing sent to ESP or CRM).");
     } catch {
       setError("Unable to update integration. Check Convex connection.");
     } finally {
@@ -551,22 +635,29 @@ export function KeapOperationsSection() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="mx-auto max-w-7xl space-y-5">
       <SectionHeader
-        eyebrow="Email and CRM"
-        title="Keap Sync"
-        description="Manual export and queue posture for Keap / registration handoff — operators prepare packages and webhook prep; no auto-send, no automatic campaign execution, and no live Keap API calls from this console in MVP."
+        eyebrow="Operations"
+        title="Email / CRM Handoff"
+        description="Manual handoff and export posture for Emailmarketing.com, Keap/CRM registration tracking, and webhook prep. Operators prepare packages; no auto-send, no automatic campaign execution, and no live CRM API calls in this build."
         actions={
           <>
             <button className="rounded-lg disabled:cursor-not-allowed disabled:opacity-60" disabled={!canManageIntegrations || isPreparing || !readyCampaigns.length} onClick={() => void prepareReadyCampaignExports()} type="button">
-              <Button><Download className="mr-2 h-4 w-4" /> {isPreparing ? "Preparing..." : "Manual export"}</Button>
+              <Button>
+                <Download className="mr-2 h-4 w-4" /> {isPreparing ? "Preparing…" : "Prepare handoff export"}
+              </Button>
             </button>
             <button className="rounded-lg disabled:cursor-not-allowed disabled:opacity-60" disabled={!canManageIntegrations || isQueueing || !readyCampaigns.length} onClick={() => void queueReadyCampaignHandoffs()} type="button">
-              <Button variant="secondary"><Send className="mr-2 h-4 w-4" /> {isQueueing ? "Queueing..." : "Queue handoff"}</Button>
+              <Button variant="secondary">
+                <Send className="mr-2 h-4 w-4" /> {isQueueing ? "Queueing…" : "Queue manual handoff"}
+              </Button>
             </button>
           </>
         }
       />
+      <p className="text-xs leading-relaxed text-slate-500">
+        Creates or queues a manual package only. Nothing is sent to Emailmarketing.com, Keap, Zapier, or external systems from this action.
+      </p>
       {message ? (
         <ControlPanel className="p-4">
           <p className="text-sm text-slate-200">{message}</p>
@@ -587,10 +678,10 @@ export function KeapOperationsSection() {
           <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
             <div>
               <p className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Connection + Jobs</p>
-              <p className="mt-1 text-sm text-slate-300">{keapIntegration?.healthSummary || keapIntegration?.fallback || "Loading Keap integration status..."}</p>
+              <p className="mt-1 text-sm text-slate-300">{keapIntegration?.healthSummary || keapIntegration?.fallback || "Loading CRM / email handoff status…"}</p>
             </div>
             <StatusBadge tone={tone(keapIntegration?.status || "not_configured")}>
-              {keapIntegration?.statusLabel || (keapIntegration ? formatStatus(keapIntegration.status) : "loading")}
+              {keapIntegration?.statusLabel || (keapIntegration ? formatStatus(keapIntegration.status) : "Loading")}
             </StatusBadge>
           </div>
           <ConsoleTable className="mt-4">
@@ -598,7 +689,7 @@ export function KeapOperationsSection() {
               <tr>
                 <Th>Campaign</Th>
                 <Th>Status</Th>
-                <Th>Tag mapping</Th>
+                <Th>Audience / CRM tag mapping</Th>
                 <Th>Pending export</Th>
                 <Th>Errors</Th>
               </tr>
@@ -606,30 +697,43 @@ export function KeapOperationsSection() {
             <tbody>
               {campaigns === undefined ? (
                 <tr>
-                  <td className="border-t border-slate-800 px-4 py-3 align-top text-slate-200" colSpan={5}>Loading Keap handoff candidates...</td>
+                  <td className="border-t border-slate-800 px-4 py-3 align-top text-slate-200" colSpan={5}>Loading manual export queue…</td>
                 </tr>
               ) : readyCampaigns.length ? (
                 readyCampaigns.map((campaign: CampaignRecord) => (
                   <tr key={campaign.campaignId}>
                     <Td>{campaign.name}</Td>
-                    <Td><StatusBadge tone="green">ready for handoff</StatusBadge></Td>
-                    <Td>{campaign.keapTagMapping || "pending tag mapping"}</Td>
-                    <Td>{latestJobByCampaignId.get(campaign.campaignId)?.status?.replace(/_/g, " ") || "not prepared"}</Td>
-                    <Td>{latestJobByCampaignId.get(campaign.campaignId)?.error || "none"}</Td>
+                    <Td>
+                      <StatusBadge tone="green">Ready for handoff</StatusBadge>
+                    </Td>
+                    <Td>{campaign.keapTagMapping || "Pending tag mapping"}</Td>
+                    <Td>{humanizeKeapJobStatus(latestJobByCampaignId.get(campaign.campaignId)?.status)}</Td>
+                    <Td>{latestJobByCampaignId.get(campaign.campaignId)?.error ? latestJobByCampaignId.get(campaign.campaignId)?.error : "None"}</Td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td className="border-t border-slate-800 px-4 py-3 align-top text-slate-200" colSpan={5}>No campaigns are currently ready for Keap handoff.</td>
+                  <td className="border-t border-slate-800 px-4 py-3 align-top text-slate-200" colSpan={5}>
+                    No campaigns are in Ready for handoff status for manual export yet.
+                  </td>
                 </tr>
               )}
             </tbody>
           </ConsoleTable>
         </ControlPanel>
-        <QueueLane title="Readiness + Controls" count={readyCampaigns.length} tone={keapIntegration?.status === "connected" ? "green" : "blue"} subtitle="Manual handoff only until live CRM policies are approved.">
+        <QueueLane
+          count={readyCampaigns.length}
+          subtitle="Manual handoff only until live CRM/email policies are approved."
+          title="Readiness + controls"
+          tone={keapIntegration?.status === "connected" ? "green" : "blue"}
+        >
           <SignalList
             items={[
-              { label: "Connection status", value: keapIntegration?.statusLabel || "loading", tone: tone(keapIntegration?.status || "not_configured") },
+              {
+                label: "Connection status",
+                value: keapIntegration?.statusLabel || formatStatus(keapIntegration?.status || "not_configured"),
+                tone: tone(keapIntegration?.status || "not_configured"),
+              },
               { label: "Last sync", value: formatTimestamp(keapIntegration?.lastSync), tone: keapIntegration?.lastSync ? "green" : "amber" },
               { label: "Available tag mappings", value: readyCampaigns.filter((campaign) => Boolean(campaign.keapTagMapping)).length, tone: "green" },
               { label: "Pending exports", value: ((jobs ?? []) as KeapSyncJobRecord[]).filter((job: KeapSyncJobRecord) => job.status === "draft" || job.status === "ready_for_manual_export").length, tone: "amber" },
@@ -648,21 +752,21 @@ export function OperationsRouteSection({ slug }: { slug?: string[] }) {
   if (child === "keap") return <KeapOperationsSection />;
   if (child === "production-bridge") return <ProductionBridgeSection />;
   return (
-    <div className="space-y-5">
+    <div className="mx-auto max-w-7xl space-y-5">
       <SectionHeader
         eyebrow="Operations"
         title="Operations route not found"
-        description={`"/operations/${child}" is not mapped. Use Integrations, Keap Sync, or Production Bridge — unknown paths are not redirected to Keap or other subsystems.`}
+        description={`"/operations/${child}" is not mapped. Use Integrations, Email / CRM Handoff, or Production Bridge — unknown paths are not redirected to external subsystems.`}
       />
       <ControlPanel className="p-4">
-        <p className="text-sm text-slate-300">Pick a valid Operations area from the sidebar or use the links below.</p>
+        <p className="text-sm text-slate-300">Pick a valid Operations area from the tab bar or use the links below.</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Link className="text-sm font-semibold text-sky-400 hover:underline" href="/operations/integrations">
             Integrations
           </Link>
           <span className="text-slate-600">·</span>
           <Link className="text-sm font-semibold text-sky-400 hover:underline" href="/operations/keap">
-            Keap Sync
+            Email / CRM Handoff
           </Link>
           <span className="text-slate-600">·</span>
           <Link className="text-sm font-semibold text-sky-400 hover:underline" href="/operations/production-bridge">

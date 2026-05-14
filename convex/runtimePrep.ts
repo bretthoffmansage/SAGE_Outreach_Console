@@ -105,9 +105,9 @@ export const prepareKeapManualExport = action({
       campaignId: campaign.campaignId,
       patch: {
         status: "ready_for_keap",
-        stage: "Keap Prep",
-        keapPrepStatus: "Manual export prepared",
-        nextAction: "Review the dry-run export package, then export manually to Keap.",
+        stage: "Handoff Prep",
+        keapPrepStatus: "Handoff package prepared (manual export when ready)",
+        nextAction: "Review the dry-run export package, then complete manual CRM export (Keap when applicable).",
       },
     });
 
@@ -154,9 +154,9 @@ export const queueKeapManualHandoff = action({
       campaignId: campaign.campaignId,
       patch: {
         status: "ready_for_keap",
-        stage: "Keap Prep",
-        keapPrepStatus: "Ready for manual export",
-        nextAction: "Export this campaign manually through Keap and confirm the handoff.",
+        stage: "Handoff Prep",
+        keapPrepStatus: "Ready for manual export / handoff",
+        nextAction: "Complete manual export and confirm handoff (Keap when applicable).",
       },
     });
 
