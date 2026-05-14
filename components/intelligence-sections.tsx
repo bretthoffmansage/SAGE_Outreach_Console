@@ -31,9 +31,7 @@ import {
   ConsoleTable,
   ControlPanel,
   InlineAction,
-  QueueLane,
   SectionHeader,
-  SignalList,
   StatusBadge,
   StatusDot,
   Td,
@@ -97,6 +95,16 @@ function formatSentimentDisplay(s: string): string {
 
 function matchedLaunchPacketName(item: { campaignId?: string; campaignName?: string }, campaignNameById: Map<string, string>): string {
   return item.campaignName ?? (item.campaignId ? campaignNameById.get(item.campaignId) : undefined) ?? "Unmatched";
+}
+
+/** Convex or legacy seeds may still store old campaign titles; map for operator-facing display only. */
+const LEGACY_RESPONSE_LAUNCH_PACKET_LABELS: Record<string, string> = {
+  "Cold Lead Reactivation — May Week 2": "Weekly Launch — Virtual Events Still Matter",
+};
+
+function displayResponseLaunchPacket(item: { campaignId?: string; campaignName?: string }, campaignNameById: Map<string, string>): string {
+  const resolved = matchedLaunchPacketName(item, campaignNameById);
+  return LEGACY_RESPONSE_LAUNCH_PACKET_LABELS[resolved] ?? resolved;
 }
 
 const responseQueues = ["Needs Reply", "Hot Leads", "Questions", "Objections", "Complaints", "Unsubscribes", "Testimonials", "Unmatched", "All Synced"];
@@ -1433,173 +1441,200 @@ export function ResponsesSection() {
           {feedback}
         </ControlPanel>
       ) : null}
-      <section className="grid gap-4 lg:grid-cols-2 lg:items-start">
-        <div className="min-w-0 space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Response list</p>
-          <div className="max-h-[min(70vh,36rem)] space-y-2 overflow-y-auto pr-1">
-            {responseRecords === undefined ? (
-              <ControlPanel className="p-4 text-sm text-slate-400">Loading response records.</ControlPanel>
-            ) : !filteredResponses.length ? (
-              <ControlPanel className="p-4 text-sm text-slate-400">No response records in this filter.</ControlPanel>
-            ) : (
-              filteredResponses.map((item) => {
-                const packet = matchedLaunchPacketName(item, campaignNameById);
-                const needsReply = item.classification === "Needs Reply" || item.status === "needs_reply";
-                const hotLead = item.tags.includes("hot_lead") || (item.sentiment === "positive" && item.urgency !== "low");
-                return (
-                  <button
-                    className={cn(
-                      "focus-ring w-full rounded-xl border p-3 text-left transition",
-                      selectedResponse?.id === item.id ? "border-sky-500/50 bg-sky-950/25" : "border-slate-800 bg-slate-950/50 hover:border-slate-700 hover:bg-slate-900/60",
-                    )}
-                    key={item.id}
-                    onClick={() => setSelectedId(item.id)}
-                    type="button"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold text-slate-100">{item.classification}</span>
-                      <StatusBadge tone={item.urgency === "high" ? "red" : item.urgency === "medium" ? "amber" : "green"}>{item.urgency}</StatusBadge>
-                      <span className="text-xs text-slate-500">{formatSentimentDisplay(item.sentiment)}</span>
-                      {needsReply ? (
-                        <StatusBadge tone="amber">Needs reply</StatusBadge>
-                      ) : null}
-                      {hotLead ? (
-                        <StatusBadge tone="green">Hot lead</StatusBadge>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 truncate text-xs text-sky-200/90" title={packet}>
-                      {packet}
-                      {item.matchConfidence !== undefined ? ` · ${Math.round(item.matchConfidence * 100)}% match` : ""}
-                    </p>
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">{item.summary}</p>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-        <div className="min-w-0 space-y-4">
-          <QueueLane count={responses.length} subtitle="Queue counts for triage. Nothing sends from this screen." title="Signal snapshot" tone="blue">
-            <SignalList
-              items={[
-                { label: "Needs reply", value: filterCount("Needs Reply"), tone: "amber" },
-                { label: "Hot leads", value: filterCount("Hot Leads"), tone: "green" },
-                { label: "Unmatched", value: filterCount("Unmatched"), tone: "gray" },
-                { label: "Draft-only posture", value: responses.every((item) => item.noAutoSend) ? "On" : "Mixed", tone: "red" },
-              ]}
-            />
-          </QueueLane>
-          <ControlPanel className="p-4">
-            {selectedResponse ? (
-              <div className="space-y-5">
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Summary</h3>
-                  <p className="mt-2 text-sm font-semibold text-slate-100">{selectedResponse.title}</p>
-                  <dl className="mt-3 grid gap-2 text-sm text-slate-300">
-                    <div className="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2">
-                      <dt className="text-slate-500">Classification</dt>
-                      <dd className="text-slate-100">{selectedResponse.classification}</dd>
-                    </div>
-                    <div className="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2">
-                      <dt className="text-slate-500">Urgency / sentiment</dt>
-                      <dd className="text-slate-100">
-                        {selectedResponse.urgency} / {formatSentimentDisplay(selectedResponse.sentiment)}
-                      </dd>
-                    </div>
-                    <div className="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2">
-                      <dt className="text-slate-500">Matched launch packet</dt>
-                      <dd className="max-w-[16rem] text-right text-slate-100">{matchedLaunchPacketName(selectedResponse, campaignNameById)}</dd>
-                    </div>
-                    <div className="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2">
-                      <dt className="text-slate-500">Recommended action</dt>
-                      <dd className="text-right text-slate-100">{selectedResponse.recommendedAction}</dd>
-                    </div>
-                    <div className="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2">
-                      <dt className="text-slate-500">Received</dt>
-                      <dd className="text-slate-100">{formatTimestamp(selectedResponse.receivedAt)}</dd>
-                    </div>
-                    <div className="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2">
-                      <dt className="text-slate-500">Source</dt>
-                      <dd className="text-slate-100">{formatResponseSourceLabel(selectedResponse.source)}</dd>
-                    </div>
-                  </dl>
+
+      {responseRecords === undefined ? (
+        <ControlPanel className="p-4 text-sm text-slate-400">Loading response records…</ControlPanel>
+      ) : (
+        <>
+          <ControlPanel className="p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Signal snapshot</p>
+            <p className="mt-0.5 text-[0.65rem] text-slate-600">Queue-wide counts for triage. Nothing sends from this screen.</p>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {(
+                [
+                  { label: "Needs reply", value: filterCount("Needs Reply"), valueClass: "text-amber-200" },
+                  { label: "Hot leads", value: filterCount("Hot Leads"), valueClass: "text-emerald-200" },
+                  { label: "Unmatched", value: filterCount("Unmatched"), valueClass: "text-slate-200" },
+                  {
+                    label: "Draft-only posture",
+                    value: responses.length ? (responses.every((item) => item.noAutoSend) ? "On" : "Mixed") : "—",
+                    valueClass:
+                      responses.length === 0 ? "text-slate-500" : responses.every((item) => item.noAutoSend) ? "text-sky-200" : "text-amber-200",
+                  },
+                ] as const
+              ).map((m) => (
+                <div className="rounded-lg border border-slate-800/90 bg-slate-950/55 px-3 py-2" key={m.label}>
+                  <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">{m.label}</p>
+                  <p className={cn("mt-1 text-lg font-semibold tabular-nums", m.valueClass)}>{m.value}</p>
                 </div>
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Original message</h3>
-                  <div className="mt-2 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3 text-sm leading-relaxed text-slate-300">
-                    <p className="whitespace-pre-wrap">{selectedResponse.originalMessage ?? "No original message captured."}</p>
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Suggested reply</h3>
-                  <p className="mt-1 text-xs text-slate-500">Editable draft only — copy into your mail tool or CRM when ready. Nothing auto-sends from Outreach Console.</p>
-                  <label className="mt-2 grid gap-2">
-                    <textarea className={textareaStyles} onChange={(event) => setReplyDraft(event.target.value)} value={replyDraft} />
-                  </label>
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Operator notes</h3>
-                  <label className="mt-2 grid gap-2">
-                    <textarea className={cn(textareaStyles, "min-h-[88px]")} onChange={(event) => setNotesDraft(event.target.value)} value={notesDraft} />
-                  </label>
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Actions</h3>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <button
-                      className={cn(actionButtonStyles, "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800")}
-                      onClick={() => {
-                        void updateSuggestedReply({ responseId: selectedResponse.id, suggestedReply: replyDraft, suggestedReplyStatus: "draft_only" })
-                          .then(() => setFeedback("Response saved."))
-                          .catch(() => setFeedback("Unable to save response. Check Convex connection."));
-                      }}
-                      type="button"
-                    >
-                      Save suggested reply
-                    </button>
-                    <button
-                      className={cn(actionButtonStyles, "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800")}
-                      onClick={() => {
-                        void updateResponseNotes({ responseId: selectedResponse.id, notes: notesDraft })
-                          .then(() => setFeedback("Response saved."))
-                          .catch(() => setFeedback("Unable to save response. Check Convex connection."));
-                      }}
-                      type="button"
-                    >
-                      Save notes
-                    </button>
-                    <button
-                      className={cn(actionButtonStyles, "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800")}
-                      onClick={() => {
-                        void markResponseNeedsReply({ responseId: selectedResponse.id })
-                          .then(() => setFeedback("Response saved."))
-                          .catch(() => setFeedback("Unable to save response. Check Convex connection."));
-                      }}
-                      type="button"
-                    >
-                      Mark needs reply
-                    </button>
-                    <button
-                      className={cn(actionButtonStyles, "border-sky-500/60 bg-sky-500 text-slate-950 hover:bg-sky-400")}
-                      onClick={() => {
-                        void markResponseResolved({ responseId: selectedResponse.id, resolvedBy: actorName })
-                          .then(() => setFeedback("Response saved."))
-                          .catch(() => setFeedback("Unable to save response. Check Convex connection."));
-                      }}
-                      type="button"
-                    >
-                      Mark resolved
-                    </button>
-                  </div>
-                </div>
-                <p className="border-t border-slate-800 pt-3 text-xs text-slate-500">Suggested replies remain drafts only. No auto-send.</p>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-400">Select a response from the list.</p>
-            )}
+              ))}
+            </div>
           </ControlPanel>
-        </div>
-      </section>
+
+          {!filteredResponses.length ? (
+            <ControlPanel className="p-6 text-center text-sm text-slate-400">No response signals match this view.</ControlPanel>
+          ) : (
+            <section className="grid gap-4 lg:grid-cols-[minmax(0,2.15fr)_minmax(0,3.35fr)] lg:items-start lg:gap-6">
+              <div className="min-w-0 w-full">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Responses</p>
+                <div className="mt-2 max-h-[min(70vh,34rem)] space-y-2 overflow-y-auto overscroll-contain pr-0.5">
+                  {filteredResponses.map((item) => {
+                    const packet = displayResponseLaunchPacket(item, campaignNameById);
+                    const needsReply = item.classification === "Needs Reply" || item.status === "needs_reply";
+                    const hotLead = item.tags.includes("hot_lead") || (item.sentiment === "positive" && item.urgency !== "low");
+                    return (
+                      <button
+                        className={cn(
+                          "focus-ring w-full rounded-xl border p-3 text-left transition",
+                          selectedResponse?.id === item.id ? "border-sky-500/50 bg-sky-950/25 ring-1 ring-sky-500/20" : "border-slate-800 bg-slate-950/50 hover:border-slate-700 hover:bg-slate-900/60",
+                        )}
+                        key={item.id}
+                        onClick={() => setSelectedId(item.id)}
+                        type="button"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-semibold text-slate-100">{item.classification}</span>
+                          <StatusBadge tone={item.urgency === "high" ? "red" : item.urgency === "medium" ? "amber" : "green"}>{item.urgency}</StatusBadge>
+                          <span className="text-xs text-slate-500">{formatSentimentDisplay(item.sentiment)}</span>
+                          {needsReply ? (
+                            <StatusBadge tone="amber">Needs reply</StatusBadge>
+                          ) : null}
+                          {hotLead ? (
+                            <StatusBadge tone="green">Hot lead</StatusBadge>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 truncate text-xs text-sky-200/90" title={packet}>
+                          {packet}
+                          {item.matchConfidence !== undefined ? ` · ${Math.round(item.matchConfidence * 100)}% match` : ""}
+                        </p>
+                        <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">{item.summary}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="min-w-0">
+                <ControlPanel className="p-5 sm:p-6">
+                  {selectedResponse ? (
+                    <div className="space-y-6">
+                      <div>
+                        <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Summary</h3>
+                        <p className="mt-2 text-sm font-semibold text-slate-100">{selectedResponse.title}</p>
+                        <dl className="mt-3 grid gap-2 text-sm text-slate-300 sm:grid-cols-2">
+                          <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2 sm:flex-col sm:justify-start">
+                            <dt className="text-slate-500">Classification</dt>
+                            <dd className="min-w-0 font-medium text-slate-100 sm:text-left">{selectedResponse.classification}</dd>
+                          </div>
+                          <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2 sm:flex-col sm:justify-start">
+                            <dt className="text-slate-500">Urgency / sentiment</dt>
+                            <dd className="min-w-0 font-medium text-slate-100 sm:text-left">
+                              {selectedResponse.urgency} / {formatSentimentDisplay(selectedResponse.sentiment)}
+                            </dd>
+                          </div>
+                          <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2 sm:col-span-2 sm:flex-col sm:justify-start">
+                            <dt className="text-slate-500">Matched launch packet</dt>
+                            <dd className="min-w-0 break-words font-medium text-slate-100 sm:text-left">
+                              {displayResponseLaunchPacket(selectedResponse, campaignNameById)}
+                            </dd>
+                          </div>
+                          <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2 sm:col-span-2 sm:flex-col sm:justify-start">
+                            <dt className="text-slate-500">Recommended action</dt>
+                            <dd className="min-w-0 break-words font-medium text-slate-100 sm:text-left">{selectedResponse.recommendedAction}</dd>
+                          </div>
+                          <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2 sm:flex-col sm:justify-start">
+                            <dt className="text-slate-500">Received</dt>
+                            <dd className="min-w-0 font-medium text-slate-100 sm:text-left">{formatTimestamp(selectedResponse.receivedAt)}</dd>
+                          </div>
+                          <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2 sm:flex-col sm:justify-start">
+                            <dt className="text-slate-500">Source</dt>
+                            <dd className="min-w-0 font-medium text-slate-100 sm:text-left">{formatResponseSourceLabel(selectedResponse.source)}</dd>
+                          </div>
+                        </dl>
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Original message</h3>
+                        <div className="mt-2 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3 text-sm leading-relaxed text-slate-300">
+                          <p className="whitespace-pre-wrap break-words">{selectedResponse.originalMessage ?? "No original message captured."}</p>
+                        </div>
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Suggested reply</h3>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Editable draft only — copy into your mail tool or CRM when ready. Nothing auto-sends from Outreach Console.
+                        </p>
+                        <label className="mt-2 grid gap-2">
+                          <textarea className={textareaStyles} onChange={(event) => setReplyDraft(event.target.value)} value={replyDraft} />
+                        </label>
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Operator notes</h3>
+                        <label className="mt-2 grid gap-2">
+                          <textarea className={cn(textareaStyles, "min-h-[100px]")} onChange={(event) => setNotesDraft(event.target.value)} value={notesDraft} />
+                        </label>
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Actions</h3>
+                        <div className="mt-3 flex flex-wrap gap-3">
+                          <button
+                            className={cn(actionButtonStyles, "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800")}
+                            onClick={() => {
+                              void updateSuggestedReply({ responseId: selectedResponse.id, suggestedReply: replyDraft, suggestedReplyStatus: "draft_only" })
+                                .then(() => setFeedback("Response saved."))
+                                .catch(() => setFeedback("Unable to save response. Check Convex connection."));
+                            }}
+                            type="button"
+                          >
+                            Save suggested reply
+                          </button>
+                          <button
+                            className={cn(actionButtonStyles, "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800")}
+                            onClick={() => {
+                              void updateResponseNotes({ responseId: selectedResponse.id, notes: notesDraft })
+                                .then(() => setFeedback("Response saved."))
+                                .catch(() => setFeedback("Unable to save response. Check Convex connection."));
+                            }}
+                            type="button"
+                          >
+                            Save notes
+                          </button>
+                          <button
+                            className={cn(actionButtonStyles, "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800")}
+                            onClick={() => {
+                              void markResponseNeedsReply({ responseId: selectedResponse.id })
+                                .then(() => setFeedback("Response saved."))
+                                .catch(() => setFeedback("Unable to save response. Check Convex connection."));
+                            }}
+                            type="button"
+                          >
+                            Mark needs reply
+                          </button>
+                          <button
+                            className={cn(actionButtonStyles, "border-sky-500/60 bg-sky-500 text-slate-950 hover:bg-sky-400")}
+                            onClick={() => {
+                              void markResponseResolved({ responseId: selectedResponse.id, resolvedBy: actorName })
+                                .then(() => setFeedback("Response saved."))
+                                .catch(() => setFeedback("Unable to save response. Check Convex connection."));
+                            }}
+                            type="button"
+                          >
+                            Mark resolved
+                          </button>
+                        </div>
+                      </div>
+                      <p className="border-t border-slate-800 pt-3 text-xs text-slate-500">Suggested replies remain drafts only. No auto-send.</p>
+                    </div>
+                  ) : (
+                    <p className="text-sm leading-relaxed text-slate-400">
+                      Select a response to review the original message, suggested draft reply, notes, and manual triage actions.
+                    </p>
+                  )}
+                </ControlPanel>
+              </div>
+            </section>
+          )}
+        </>
+      )}
     </div>
   );
 }
